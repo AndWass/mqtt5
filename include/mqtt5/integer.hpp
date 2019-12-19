@@ -104,7 +104,8 @@ Iter serialize(integer<BackType> value, Iter out)
     auto shift_amount = 8*(type_size-1);
     for(std::size_t i=0; i<type_size; i++)
     {
-        *out++ = static_cast<std::uint8_t>(value.value() >> shift_amount) & 0x00FF;
+        *out = static_cast<std::uint8_t>(value.value() >> shift_amount) & 0x00FF;
+        ++out;
         shift_amount -= 8;
     }
     return out;
@@ -122,7 +123,8 @@ Iter serialize(integer<variable_length_tag> value, Iter out)
         {
             byte |= 0x80;
         }
-        *out++ = byte;
+        *out = byte;
+        ++out;
     }while(val > 0);
     return out;
 }
