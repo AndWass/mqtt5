@@ -11,25 +11,25 @@ namespace detail
 {
 class binary_validation
 {
-    void validate(std::size_t sz) {
+public:
+    void validate_size(std::size_t sz) {
         if (sz > max_size()) {
             throw std::length_error("Maximum binary size is 65535");
         }
     }
 
-public:
     binary_validation() noexcept = default;
     binary_validation(std::size_t count) {
-        validate(count);
+        validate_size(count);
     };
 
     template <class Iter>
     binary_validation(Iter begin, Iter end) {
-        validate(std::distance(begin, end));
+        validate_size(std::distance(begin, end));
     }
 
     explicit binary_validation(const std::vector<std::uint8_t> &data) {
-        validate(data.size());
+        validate_size(data.size());
     }
 
     constexpr std::size_t max_size() const noexcept {
@@ -39,7 +39,7 @@ public:
 } // namespace detail
 
 class binary : public boost::stl_interfaces::container_interface<binary, true>,
-               detail::binary_validation
+               private detail::binary_validation
 {
 public:
     using value_type = std::uint8_t;
@@ -104,20 +104,30 @@ public:
 
     template <class... Args>
     iterator emplace(const_iterator pos, Args &&... args) {
+        binary_validation::validate_size(size() + 1);
         return storage_.emplace(pos, std::forward<Args>(args)...);
+    }
+
+    template<class...Args>
+    iterator emplace_front(Args&&...args) {
+        binary_validation::validate_size(size() + 1);
+        return storage_.emplace(begin(), std::forward<Args>(args)...);
     }
 
     template <class Iter>
     iterator insert(const_iterator pos, Iter begin, Iter end) {
+        binary_validation::validate_size(size() + (end-begin));
         return storage_.insert(pos, begin, end);
     }
 
-    iterator erase(const_iterator first, const_iterator last) noexcept {
+    iterator erase(const_iterator first, const_iterator last) noexcept(
+        noexcept(std::declval<std::vector<value_type>>().erase(first, last))) {
         return storage_.erase(first, last);
     }
 
     template <class... Args>
     reference emplace_back(Args &&... args) {
+        binary_validation::validate_size(size() + 1);
         return storage_.emplace_back(std::forward<Args>(args)...);
     }
 
@@ -138,9 +148,23 @@ private:
 
 template <class Iter>
 Iter serialize(const binary &bin, Iter out) {
-    integer16 size(bin.size());
+    integer16 size(static_cast<std::uint16_t>(bin.size()));
     out = serialize(size, out);
     return std::copy(bin.begin(), bin.end(), out);
+}
+
+template<class Iter>
+Iter deserialize_into(binary &bin, Iter begin, Iter end)
+{
+    integer16 size;
+    begin = deserialize_into(size, begin, end);
+    auto data_left = end-begin;
+    if(data_left < size.value())
+    {
+        throw std::length_error("not enough data to deserialize a string");
+    }
+    bin = binary(begin, begin+size.value());
+    return begin + size.value();
 }
 
 } // namespace mqtt5

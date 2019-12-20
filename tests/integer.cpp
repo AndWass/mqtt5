@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 
+#include <vector>
 #include <mqtt5/integer.hpp>
 #include <array>
 #include <nonstd/span.hpp>
@@ -140,5 +141,97 @@ TEST_CASE("mqtt5: variable length integer serialization")
         REQUIRE(data[1] == 0xff);
         REQUIRE(data[2] == 0xff);
         REQUIRE(data[3] == 0x7f);
+    }
+}
+
+TEST_CASE("integer16: deserialize_into")
+{
+    std::array<std::uint8_t, 3> data{0xab,0xcd, 1};
+    mqtt5::integer16 integer;
+    auto iter = deserialize_into(integer, data.begin(), data.end());
+    REQUIRE(iter == data.begin() + 2);
+    REQUIRE(integer.value() == 0xabcd);
+}
+
+TEST_CASE("integer16: deserialize_into failure")
+{
+    std::array<std::uint8_t, 1> data{0xab};
+    mqtt5::integer16 integer;
+    REQUIRE_THROWS_AS(deserialize_into(integer, data.begin(), data.end()), std::length_error);
+    SUBCASE("empty buffer")
+    {
+        std::vector<std::uint8_t> empty;
+        mqtt5::integer16 integer;
+        REQUIRE_THROWS_AS(deserialize_into(integer, empty.begin(), empty.end()), std::length_error);
+    }
+}
+
+TEST_CASE("integer32: deserialize_into")
+{
+    std::array<std::uint8_t, 5> data{0xab,0xcd, 0xef, 0x87, 2};
+    mqtt5::integer32 integer;
+    auto iter = deserialize_into(integer, data.begin(), data.end());
+    REQUIRE(iter == data.begin() + 4);
+    REQUIRE(integer.value() == 0xabcdef87);
+}
+
+TEST_CASE("integer32: deserialize_into failure")
+{
+    std::array<std::uint8_t, 3> data{0xab, 0xcd, 0xef};
+    mqtt5::integer32 integer;
+    REQUIRE_THROWS_AS(deserialize_into(integer, data.begin(), data.end()), std::length_error);
+    SUBCASE("empty buffer")
+    {
+        std::vector<std::uint8_t> empty;
+        mqtt5::integer32 integer;
+        REQUIRE_THROWS_AS(deserialize_into(integer, empty.begin(), empty.end()), std::length_error);
+    }
+}
+
+TEST_CASE("varlen_integer: deserialize_into")
+{
+    SUBCASE("empty buffer")
+    {
+        std::vector<std::uint8_t> empty;
+        mqtt5::varlen_integer integer;
+        REQUIRE_THROWS_AS(deserialize_into(integer, empty.begin(), empty.end()), std::length_error);
+    }
+    SUBCASE("single byte in large buffer")
+    {
+        std::array<std::uint8_t, 6> data{0x7f,0xff, 0xff, 0x7f, 5, 6};
+        mqtt5::varlen_integer integer;
+        auto iter = deserialize_into(integer, data.begin(), data.end());
+        REQUIRE(iter == data.begin() + 1);
+        REQUIRE(integer.value() == 0x7f);
+    }
+    SUBCASE("single byte in single byte buffer")
+    {
+        std::array<std::uint8_t, 1> data{0x7f};
+        mqtt5::varlen_integer integer;
+        auto iter = deserialize_into(integer, data.begin(), data.end());
+        REQUIRE(iter == data.end());
+        REQUIRE(integer.value() == 0x7f);
+    }
+    SUBCASE("two bytes")
+    {
+        std::array<std::uint8_t, 6> data{0x80,0x01, 0xff, 0x7f, 5, 6};
+        mqtt5::varlen_integer integer;
+        auto iter = deserialize_into(integer, data.begin(), data.end());
+        REQUIRE(iter == data.begin() + 2);
+        REQUIRE(integer.value() == 0x80);
+    }
+    SUBCASE("4 bytes")
+    {
+        std::array<std::uint8_t, 6> data{0xff,0xff, 0xff, 0x7f, 5, 6};
+        mqtt5::varlen_integer integer;
+        auto iter = deserialize_into(integer, data.begin(), data.end());
+        REQUIRE(iter == data.begin() + 4);
+        REQUIRE(integer.value() == 268'435'455);
+    }
+    SUBCASE("length error")
+    {
+        std::array<std::uint8_t, 3> data{0xff,0xff, 0xff};
+        mqtt5::varlen_integer integer;
+        REQUIRE_THROWS_AS(deserialize_into(integer, data.begin(), data.end()), std::length_error);
     }
 }

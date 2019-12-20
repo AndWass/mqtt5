@@ -36,7 +36,7 @@ public:
                          iterator, std::random_access_iterator_tag, std::uint32_t, std::uint32_t>
     {
     public:
-        constexpr iterator() noexcept = default;
+        iterator() = default;
         iterator(const string &str) noexcept : iterator(str.storage_.begin(), str.storage_.end()) {
         }
         std::uint32_t operator*() const {
@@ -124,7 +124,7 @@ private:
             return is_reserved_ascii(elem) || is_unicode_noncharacter(elem);
         };
         auto is_empty = storage_.begin() == storage_.end();
-        if (!utf8::is_valid(storage_)) {
+        if (!utf8::is_valid(storage_.begin(), storage_.end())) {
             throw_bad_string();
         }
         if (std::find_if(this->begin(), this->end(), is_disallowed_code_point) != this->end()) {
@@ -144,8 +144,42 @@ inline auto end(string &s) {
 template<class Iter>
 Iter serialize(const string &str, Iter out)
 {
-    integer16 size(str.byte_size());
+    integer16 size(static_cast<std::uint16_t>(str.byte_size()));
     out = serialize(size, out);
     return std::copy(str.byte_begin(), str.byte_end(), out);
 }
+
+template<class Iter>
+Iter deserialize_into(string &str, Iter begin, Iter end)
+{
+    integer16 size;
+    begin = deserialize_into(size, begin, end);
+    auto data_left = end-begin;
+    if(data_left < size.value())
+    {
+        throw std::length_error("not enough data to deserialize a string");
+    }
+    str = string(begin, begin+size.value());
+    return begin + size.value();
+}
+
+struct key_value_pair
+{
+    string key;
+    string value;
+};
+
+template<class Iter>
+Iter serialize(const key_value_pair &kv, Iter out) {
+    out = serialize(kv.key, out);
+    return serialize(kv.value, out);
+}
+
+template<class Iter>
+Iter deserialize_into(key_value_pair& kv, Iter begin, Iter end)
+{
+    begin = deserialize_into(kv.key, begin, end);
+    return deserialize_into(kv.value, begin, end);
+}
+
 } // namespace mqtt5
