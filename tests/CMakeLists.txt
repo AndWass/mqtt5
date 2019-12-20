@@ -4,6 +4,7 @@ add_executable(mqtt5-tests
     integer.cpp
     string.cpp
     serialize.cpp
+    binary.cpp
 )
 target_link_libraries(mqtt5-tests PRIVATE 
     CONAN_PKG::doctest
