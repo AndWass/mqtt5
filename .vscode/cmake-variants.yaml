@@ -1,0 +1,42 @@
+buildType:
+  default: debug
+  description: Build type option
+  choices:
+    debug:
+      short: Debug
+      long: Build with debugging information
+      buildType: Debug
+    release:
+      short: Release
+      long: Optimize the resulting binaries
+      buildType: Release
+
+buildTests:
+  default: 'yes'
+  description: Build tests option
+  choices:
+    'yes':
+      short: With tests
+      long: Build all tests
+      settings:
+        MQTT5_BUILD_TESTS: yes
+    'no':
+      short: No tests
+      long: Don't build tests
+      settings:
+        MQTT5_BUILD_TESTS: no
+        
+buildSamples:
+  default: 'yes'
+  description: Build samples option
+  choices:
+    'yes':
+      short: With samples
+      long: Build all samples
+      settings:
+        MQTT5_BUILD_SAMPLES: yes
+    'no':
+      short: No samples
+      long: Don't build samples
+      settings:
+        MQTT5_BUILD_SAMPLES: no
