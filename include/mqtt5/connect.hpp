@@ -119,24 +119,24 @@ template <class Iter>
         properties.emplace_back(property_id::will_delay_interval,
                                 integer32{will.properties.delay_interval.count()});
     }
-    if(will.properties.payload_format_indicator) {
-        properties.emplace_back(property_id::payload_format_indicator, will.properties.payload_format_indicator);
+    if (will.properties.payload_format_indicator) {
+        properties.emplace_back(property_id::payload_format_indicator,
+                                will.properties.payload_format_indicator);
     }
-    if(will.properties.message_expiry_interval) {
-        properties.emplace_back(property_id::message_expiry_interval, integer32{
-            *will.properties.message_expiry_interval
-        });
+    if (will.properties.message_expiry_interval) {
+        properties.emplace_back(property_id::message_expiry_interval,
+                                integer32{*will.properties.message_expiry_interval});
     }
-    if(!will.properties.content_type.empty()) {
+    if (!will.properties.content_type.empty()) {
         properties.emplace_back(property_id::content_type, will.properties.content_type);
     }
-    if(!will.properties.response_topic.empty()) {
+    if (!will.properties.response_topic.empty()) {
         properties.emplace_back(property_id::response_topic, will.properties.response_topic);
     }
-    if(!will.properties.correlation_data.empty()) {
+    if (!will.properties.correlation_data.empty()) {
         properties.emplace_back(property_id::correlation_data, will.properties.correlation_data);
     }
-    for(auto &up: will.properties.user_properties) {
+    for (auto &up : will.properties.user_properties) {
         properties.emplace_back(property_id::user_property, up);
     }
     out = mqtt5::serialize(properties, out);
