@@ -118,6 +118,10 @@ public:
         return storage_;
     }
 
+    std::string to_string() const noexcept {
+        return storage_;
+    }
+
 private:
     void throw_bad_string() const {
         throw std::invalid_argument("Bad UTF-8 formatted string");
