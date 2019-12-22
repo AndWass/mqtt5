@@ -147,14 +147,14 @@ private:
 };
 
 template <class Iter>
-Iter serialize(const binary &bin, Iter out) {
+[[nodiscard]] Iter serialize(const binary &bin, Iter out) {
     integer16 size(static_cast<std::uint16_t>(bin.size()));
-    out = serialize(size, out);
+    out = mqtt5::serialize(size, out);
     return std::copy(bin.begin(), bin.end(), out);
 }
 
 template<class Iter>
-Iter deserialize_into(binary &bin, Iter begin, Iter end)
+[[nodiscard]] Iter deserialize_into(binary &bin, Iter begin, Iter end)
 {
     integer16 size;
     begin = deserialize_into(size, begin, end);

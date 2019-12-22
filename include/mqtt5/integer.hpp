@@ -4,6 +4,7 @@
 #include <exception>
 #include <nonstd/span.hpp>
 #include <type_traits>
+#include <limits>
 
 #include "serialize.hpp"
 
@@ -18,6 +19,7 @@ class integer
 {
 public:
     using value_type = BackingType;
+    static constexpr BackingType max_value = std::numeric_limits<BackingType>::max();
     constexpr integer() noexcept = default;
     constexpr explicit integer(value_type value) noexcept : value_(value) {
     }
@@ -40,6 +42,11 @@ public:
         return value_;
     }
 
+    integer operator=(value_type value) {
+        value_ = value;
+        return *this;
+    }
+
 private:
     static_assert(std::disjunction_v<std::is_same<BackingType, std::uint16_t>,
                                      std::is_same<BackingType, std::uint32_t>>);
@@ -51,6 +58,7 @@ class integer<variable_length_tag>
 {
 public:
     using value_type = std::uint32_t;
+    static constexpr std::uint32_t max_value = 268'435'455;
     constexpr integer() noexcept = default;
     constexpr explicit integer(value_type value) noexcept : value_(value) {
     }
@@ -91,6 +99,11 @@ public:
         return value_;
     }
 
+    integer operator=(value_type value) {
+        value_ = value;
+        return *this;
+    }
+
 private:
     value_type value_ = 0;
 };
@@ -122,7 +135,7 @@ MAKE_OPERATOR(>=)
 
 template <class BackType, class Iter,
           std::enable_if_t<!std::is_same_v<BackType, variable_length_tag>> * = nullptr>
-Iter serialize(integer<BackType> value, Iter out) {
+[[nodiscard]] Iter serialize(integer<BackType> value, Iter out) {
     constexpr auto type_size = sizeof(BackType);
     auto shift_amount = 8 * (type_size - 1);
     for (std::size_t i = 0; i < type_size; i++) {
@@ -134,7 +147,7 @@ Iter serialize(integer<BackType> value, Iter out) {
 }
 
 template <class BackType, class Iter>
-Iter deserialize_into(integer<BackType> &value, Iter begin, Iter end) {
+[[nodiscard]] Iter deserialize_into(integer<BackType> &value, Iter begin, Iter end) {
     detail::throw_if_empty(begin, end);
     nonstd::span<const std::uint8_t> data(&(*begin), end - begin);
     ::new (&value) integer<BackType>(data);
@@ -142,7 +155,7 @@ Iter deserialize_into(integer<BackType> &value, Iter begin, Iter end) {
 }
 
 template <class Iter>
-Iter serialize(integer<variable_length_tag> value, Iter out) {
+[[nodiscard]] Iter serialize(integer<variable_length_tag> value, Iter out) {
     auto val = value.value();
     do {
         std::uint8_t byte = val % 128;
@@ -157,7 +170,7 @@ Iter serialize(integer<variable_length_tag> value, Iter out) {
 }
 
 template <class Iter>
-Iter deserialize_into(integer<variable_length_tag> &value, Iter begin, Iter end) {
+[[nodiscard]] Iter deserialize_into(integer<variable_length_tag> &value, Iter begin, Iter end) {
     detail::throw_if_empty(begin, end);
     std::size_t bytes_used;
     nonstd::span<const std::uint8_t> data(&(*begin), end - begin);

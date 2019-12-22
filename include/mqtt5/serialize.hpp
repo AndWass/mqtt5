@@ -41,7 +41,7 @@ struct count_iterator
 };
 
 template<class Iter>
-Iter deserialize_into(std::uint8_t &byte, Iter begin, Iter end)
+[[nodiscard]] Iter deserialize_into(std::uint8_t &byte, Iter begin, Iter end)
 {
     if(begin == end) {
         throw std::length_error("not enough data to deserialize");
@@ -52,13 +52,27 @@ Iter deserialize_into(std::uint8_t &byte, Iter begin, Iter end)
 }
 
 template<class Iter>
-Iter deserialize_into(std::vector<std::uint8_t> &data, std::size_t cnt, Iter begin, Iter end)
+[[nodiscard]] Iter serialize(std::uint8_t byte, Iter out) {
+    *out = byte;
+    ++out;
+    return out;
+}
+
+template<class Iter>
+[[nodiscard]] Iter deserialize_into(std::vector<std::uint8_t> &data, std::size_t cnt, Iter begin, Iter end)
 {
     auto data_left = end-begin;
     if(data_left < cnt) {
         throw std::length_error("not enough data to deserialize vector");
     }
-    data.reserve(sz);
+    data.reserve(cnt);
     return std::copy(begin, begin+cnt, std::back_inserter(data));
+}
+
+template<class T>
+[[nodiscard]] std::uint32_t serialized_size_of(const T& value) {
+    using mqtt5::serialize;
+    count_iterator iter;
+    return serialize(value, iter).count;
 }
 } // namespace mqtt5

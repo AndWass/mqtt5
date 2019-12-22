@@ -157,12 +157,12 @@ TEST_CASE("integer16: deserialize_into failure")
 {
     std::array<std::uint8_t, 1> data{0xab};
     mqtt5::integer16 integer;
-    REQUIRE_THROWS_AS(deserialize_into(integer, data.begin(), data.end()), std::length_error);
+    REQUIRE_THROWS_AS((void)deserialize_into(integer, data.begin(), data.end()), std::length_error);
     SUBCASE("empty buffer")
     {
         std::vector<std::uint8_t> empty;
         mqtt5::integer16 integer;
-        REQUIRE_THROWS_AS(deserialize_into(integer, empty.begin(), empty.end()), std::length_error);
+        REQUIRE_THROWS_AS((void)deserialize_into(integer, empty.begin(), empty.end()), std::length_error);
     }
 }
 
@@ -179,12 +179,12 @@ TEST_CASE("integer32: deserialize_into failure")
 {
     std::array<std::uint8_t, 3> data{0xab, 0xcd, 0xef};
     mqtt5::integer32 integer;
-    REQUIRE_THROWS_AS(deserialize_into(integer, data.begin(), data.end()), std::length_error);
+    REQUIRE_THROWS_AS((void)deserialize_into(integer, data.begin(), data.end()), std::length_error);
     SUBCASE("empty buffer")
     {
         std::vector<std::uint8_t> empty;
         mqtt5::integer32 integer;
-        REQUIRE_THROWS_AS(deserialize_into(integer, empty.begin(), empty.end()), std::length_error);
+        REQUIRE_THROWS_AS((void)deserialize_into(integer, empty.begin(), empty.end()), std::length_error);
     }
 }
 
@@ -194,7 +194,7 @@ TEST_CASE("varlen_integer: deserialize_into")
     {
         std::vector<std::uint8_t> empty;
         mqtt5::varlen_integer integer;
-        REQUIRE_THROWS_AS(deserialize_into(integer, empty.begin(), empty.end()), std::length_error);
+        REQUIRE_THROWS_AS((void)deserialize_into(integer, empty.begin(), empty.end()), std::length_error);
     }
     SUBCASE("single byte in large buffer")
     {
@@ -232,6 +232,6 @@ TEST_CASE("varlen_integer: deserialize_into")
     {
         std::array<std::uint8_t, 3> data{0xff,0xff, 0xff};
         mqtt5::varlen_integer integer;
-        REQUIRE_THROWS_AS(deserialize_into(integer, data.begin(), data.end()), std::length_error);
+        REQUIRE_THROWS_AS((void)deserialize_into(integer, data.begin(), data.end()), std::length_error);
     }
 }

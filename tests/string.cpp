@@ -48,3 +48,16 @@ TEST_CASE("string: serialize ascii string")
     REQUIRE(serialized[6] == 'o');
     REQUIRE(iter == serialized.begin() + 7);
 }
+
+TEST_CASE("string: assignment operator")
+{
+    mqtt5::string a("hello");
+    mqtt5::string b("world");
+    a = b;
+    REQUIRE(a == "world");
+    a = "hello";
+    REQUIRE(a == "hello");
+    std::string world = "world";
+    a = world;
+    REQUIRE(a == "world");
+}

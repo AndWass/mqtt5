@@ -15,6 +15,8 @@ namespace mqtt5
 class string
 {
 public:
+    string() = default;
+
     template <class Integral, std::enable_if_t<std::is_integral_v<Integral>> * = nullptr>
     explicit string(std::initializer_list<Integral> init) : string(init.begin(), init.end()) {
     }
@@ -96,6 +98,22 @@ public:
         return storage_.size();
     }
 
+    bool empty() const noexcept {
+        return storage_.empty();
+    }
+
+    template <class T, std::enable_if_t<std::is_assignable_v<std::string, T>> * = nullptr>
+    string &operator=(T &&val) {
+        storage_ = std::forward<T>(val);
+        return *this;
+    }
+
+    template <class T, std::enable_if_t<std::is_void_v<std::void_t<decltype(
+                           std::declval<std::string &>() == std::declval<T>())>>> * = nullptr>
+    bool operator==(const T &rhs) const {
+        return storage_ == rhs;
+    }
+
     explicit operator std::string() noexcept {
         return storage_;
     }
@@ -141,25 +159,22 @@ inline auto end(string &s) {
     return s.end();
 }
 
-template<class Iter>
-Iter serialize(const string &str, Iter out)
-{
+template <class Iter>
+[[nodiscard]] Iter serialize(const string &str, Iter out) {
     integer16 size(static_cast<std::uint16_t>(str.byte_size()));
-    out = serialize(size, out);
+    out = mqtt5::serialize(size, out);
     return std::copy(str.byte_begin(), str.byte_end(), out);
 }
 
-template<class Iter>
-Iter deserialize_into(string &str, Iter begin, Iter end)
-{
+template <class Iter>
+[[nodiscard]] Iter deserialize_into(string &str, Iter begin, Iter end) {
     integer16 size;
     begin = deserialize_into(size, begin, end);
-    auto data_left = end-begin;
-    if(data_left < size.value())
-    {
+    auto data_left = end - begin;
+    if (data_left < size.value()) {
         throw std::length_error("not enough data to deserialize a string");
     }
-    str = string(begin, begin+size.value());
+    str = string(begin, begin + size.value());
     return begin + size.value();
 }
 
@@ -169,15 +184,14 @@ struct key_value_pair
     string value;
 };
 
-template<class Iter>
-Iter serialize(const key_value_pair &kv, Iter out) {
-    out = serialize(kv.key, out);
-    return serialize(kv.value, out);
+template <class Iter>
+[[nodiscard]] Iter serialize(const key_value_pair &kv, Iter out) {
+    out = mqtt5::serialize(kv.key, out);
+    return mqtt5::serialize(kv.value, out);
 }
 
-template<class Iter>
-Iter deserialize_into(key_value_pair& kv, Iter begin, Iter end)
-{
+template <class Iter>
+[[nodiscard]] Iter deserialize_into(key_value_pair &kv, Iter begin, Iter end) {
     begin = deserialize_into(kv.key, begin, end);
     return deserialize_into(kv.value, begin, end);
 }
