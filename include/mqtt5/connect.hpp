@@ -5,6 +5,9 @@
 #include <numeric>
 #include <optional>
 
+#include <boost/uuid/random_generator.hpp>
+#include <boost/uuid/uuid_io.hpp>
+
 #include "binary_packet.hpp"
 #include "property.hpp"
 #include "serialize.hpp"
@@ -83,6 +86,28 @@ public:
     string client_id;
     string username;
     string password;
+
+    static string generate_client_id() noexcept {
+        static const std::string_view string_characters =
+            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        auto uuid1 = boost::uuids::random_generator()();
+        auto uuid2 = boost::uuids::random_generator()();
+        std::string retval;
+
+        auto add_uuid = [&retval](const auto &uuid) {
+            for (auto b : uuid) {
+                if (retval.size() == 23) {
+                    break;
+                }
+                retval += string_characters[b % string_characters.size()];
+            }
+        };
+
+        add_uuid(uuid1);
+        add_uuid(uuid2);
+
+        return string{retval};
+    }
 
 private:
 };
