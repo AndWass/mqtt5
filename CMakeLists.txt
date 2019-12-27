@@ -17,3 +17,7 @@ target_include_directories(${PROJECT_NAME} INTERFACE ${CMAKE_CURRENT_LIST_DIR}/i
 if(MQTT5_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
+
+if(MQTT5_BUILD_SAMPLES)
+    add_subdirectory(samples)
+endif()

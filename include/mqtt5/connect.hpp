@@ -8,7 +8,6 @@
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
-#include "binary_packet.hpp"
 #include "property.hpp"
 #include "serialize.hpp"
 #include "string.hpp"
@@ -41,7 +40,7 @@ struct connect_flags
         retval += (static_cast<std::uint8_t>(will_qos) << 3);
         return retval;
     }
-    bool clean_start = false;
+    bool clean_start = true;
     bool will_flag = false;
     quality_of_service will_qos = quality_of_service::qos0;
     bool will_retain = false;
@@ -125,7 +124,7 @@ template <class Iter>
     }
     if (will.properties.message_expiry_interval) {
         properties.emplace_back(property_id::message_expiry_interval,
-                                integer32{*will.properties.message_expiry_interval});
+                                integer32(will.properties.message_expiry_interval->count()));
     }
     if (!will.properties.content_type.empty()) {
         properties.emplace_back(property_id::content_type, will.properties.content_type);
@@ -155,7 +154,7 @@ template <class Iter>
     if (c.keep_alive.count() > integer16::max_value) {
         throw std::invalid_argument("Keep alive must not be greater than 65535");
     }
-    integer16 i16(c.keep_alive.count());
+    integer16 i16(static_cast<std::uint16_t>(c.keep_alive.count()));
     out = mqtt5::serialize(i16, out);
 
     std::vector<property> properties;
@@ -184,6 +183,20 @@ template <class Iter>
 
     out = mqtt5::serialize(properties, out);
     out = mqtt5::serialize(c.client_id, out);
+
+    if(c.flags.will_flag)
+    {
+        out = mqtt5::serialize(c.will, out);
+    }
+
+    if(c.flags.username)
+    {
+        out = mqtt5::serialize(c.username, out);
+    }
+    if(c.flags.password)
+    {
+        out = mqtt5::serialize(c.password, out);
+    }
 
     return out;
 }

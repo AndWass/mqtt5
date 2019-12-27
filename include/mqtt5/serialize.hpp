@@ -73,6 +73,6 @@ template<class T>
 [[nodiscard]] std::uint32_t serialized_size_of(const T& value) {
     using mqtt5::serialize;
     count_iterator iter;
-    return serialize(value, iter).count;
+    return static_cast<std::uint32_t>(serialize(value, iter).count);
 }
 } // namespace mqtt5
