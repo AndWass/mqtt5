@@ -7,6 +7,8 @@
 
 namespace mqtt5
 {
+namespace type
+{
 namespace detail
 {
 class binary_validation
@@ -108,15 +110,15 @@ public:
         return storage_.emplace(pos, std::forward<Args>(args)...);
     }
 
-    template<class...Args>
-    iterator emplace_front(Args&&...args) {
+    template <class... Args>
+    iterator emplace_front(Args &&... args) {
         binary_validation::validate_size(size() + 1);
         return storage_.emplace(begin(), std::forward<Args>(args)...);
     }
 
     template <class Iter>
     iterator insert(const_iterator pos, Iter begin, Iter end) {
-        binary_validation::validate_size(size() + (end-begin));
+        binary_validation::validate_size(size() + (end - begin));
         return storage_.insert(pos, begin, end);
     }
 
@@ -148,23 +150,22 @@ private:
 
 template <class Iter>
 [[nodiscard]] Iter serialize(const binary &bin, Iter out) {
+    using mqtt5::type::serialize;
     integer16 size(static_cast<std::uint16_t>(bin.size()));
-    out = mqtt5::serialize(size, out);
+    out = serialize(size, out);
     return std::copy(bin.begin(), bin.end(), out);
 }
 
-template<class Iter>
-[[nodiscard]] Iter deserialize_into(binary &bin, Iter begin, Iter end)
-{
+template <class Iter>
+[[nodiscard]] Iter deserialize_into(binary &bin, Iter begin, Iter end) {
     integer16 size;
     begin = deserialize_into(size, begin, end);
-    auto data_left = end-begin;
-    if(data_left < size.value())
-    {
+    auto data_left = end - begin;
+    if (data_left < size.value()) {
         throw std::length_error("not enough data to deserialize a string");
     }
-    bin = binary(begin, begin+size.value());
+    bin = binary(begin, begin + size.value());
     return begin + size.value();
 }
-
+} // namespace type
 } // namespace mqtt5

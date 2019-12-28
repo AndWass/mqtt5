@@ -12,6 +12,8 @@
 
 namespace mqtt5
 {
+namespace type
+{
 class string
 {
 public:
@@ -165,8 +167,10 @@ inline auto end(string &s) {
 
 template <class Iter>
 [[nodiscard]] Iter serialize(const string &str, Iter out) {
+    using namespace mqtt5;
+    using namespace mqtt5::type;
     integer16 size(static_cast<std::uint16_t>(str.byte_size()));
-    out = mqtt5::serialize(size, out);
+    out = serialize(size, out);
     return std::copy(str.byte_begin(), str.byte_end(), out);
 }
 
@@ -190,14 +194,14 @@ struct key_value_pair
 
 template <class Iter>
 [[nodiscard]] Iter serialize(const key_value_pair &kv, Iter out) {
-    out = mqtt5::serialize(kv.key, out);
-    return mqtt5::serialize(kv.value, out);
+    out = type::serialize(kv.key, out);
+    return type::serialize(kv.value, out);
 }
 
 template <class Iter>
 [[nodiscard]] Iter deserialize_into(key_value_pair &kv, Iter begin, Iter end) {
-    begin = deserialize_into(kv.key, begin, end);
-    return deserialize_into(kv.value, begin, end);
+    begin = type::deserialize_into(kv.key, begin, end);
+    return type::deserialize_into(kv.value, begin, end);
 }
-
+} // namespace type
 } // namespace mqtt5

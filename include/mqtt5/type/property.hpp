@@ -2,12 +2,15 @@
 
 #include "binary.hpp"
 #include "integer.hpp"
-#include "serialize.hpp"
+#include "mqtt5/message/serialize.hpp"
 #include "string.hpp"
 
+#include <numeric>
 #include <variant>
 
 namespace mqtt5
+{
+namespace type
 {
 enum class property_id : std::uint8_t {
     unused = 0,
@@ -36,7 +39,7 @@ enum class property_id : std::uint8_t {
     user_property = 38,
     maximum_packet_size = 39,
     wildcard_subscription_available = 40,
-    subscription_identifier_available = 41,
+    subscription_identifiers_available = 41,
     shared_subscription_available = 42
 };
 namespace detail
@@ -46,12 +49,15 @@ constexpr property_id uint8_to_property_id = static_cast<property_id>(Id);
 }
 struct property
 {
-    using value_type = std::variant<std::uint8_t, integer16, integer32, varlen_integer, string,
+    using value_type = std::variant<integer8, integer16, integer32, varlen_integer, string,
                                     binary, key_value_pair>;
 
     property() noexcept = default;
     template <class T>
     property(property_id id, T value) : id(id), value(value) {
+    }
+
+    property(property_id id, bool value) : id(id), value(integer8(value ? 1 : 0)) {
     }
     property_id id = property_id::unused;
     value_type value;
@@ -64,10 +70,14 @@ struct property_value_serializer
 {
     template <class Iter>
     [[nodiscard]] static Iter serialize(const property &p, Iter out) {
-        return mqtt5::serialize(std::get<T>(p.value), out);
+        using mqtt5::serialize;
+        using mqtt5::type::serialize;
+        return serialize(std::get<T>(p.value), out);
     }
     template <class Iter>
     static Iter deserialize_into(property &p, Iter begin, Iter end) {
+        using mqtt5::deserialize_into;
+        using mqtt5::type::deserialize_into;
         T value;
         begin = deserialize_into(value, begin, end);
         p.id = Id;
@@ -75,7 +85,6 @@ struct property_value_serializer
         return begin;
     }
 };
-
 template <std::uint8_t Id>
 struct property_traits
 {};
@@ -86,7 +95,7 @@ struct property_traits
         using value_type = T;                                                                      \
         using value_serializer = property_value_serializer<detail::uint8_to_property_id<X>, T>;    \
     }
-PROPERTY_TRAITS(1, std::uint8_t);
+PROPERTY_TRAITS(1, integer8);
 PROPERTY_TRAITS(2, integer32);
 PROPERTY_TRAITS(3, string);
 PROPERTY_TRAITS(8, string);
@@ -97,29 +106,31 @@ PROPERTY_TRAITS(18, string);
 PROPERTY_TRAITS(19, integer16);
 PROPERTY_TRAITS(21, string);
 PROPERTY_TRAITS(22, binary);
-PROPERTY_TRAITS(23, std::uint8_t);
+PROPERTY_TRAITS(23, integer8);
 PROPERTY_TRAITS(24, integer32);
-PROPERTY_TRAITS(25, std::uint8_t);
+PROPERTY_TRAITS(25, integer8);
 PROPERTY_TRAITS(26, string);
 PROPERTY_TRAITS(28, string);
 PROPERTY_TRAITS(31, string);
 PROPERTY_TRAITS(33, integer16);
 PROPERTY_TRAITS(34, integer16);
 PROPERTY_TRAITS(35, integer16);
-PROPERTY_TRAITS(36, std::uint8_t);
-PROPERTY_TRAITS(37, std::uint8_t);
+PROPERTY_TRAITS(36, integer8);
+PROPERTY_TRAITS(37, integer8);
 PROPERTY_TRAITS(38, key_value_pair);
 PROPERTY_TRAITS(39, integer32);
-PROPERTY_TRAITS(40, std::uint8_t);
-PROPERTY_TRAITS(41, std::uint8_t);
-PROPERTY_TRAITS(42, std::uint8_t);
+PROPERTY_TRAITS(40, integer8);
+PROPERTY_TRAITS(41, integer8);
+PROPERTY_TRAITS(42, integer8);
 #undef PROPERTY_TRAITS
 } // namespace detail
 
 template <class Iter>
 [[nodiscard]] Iter serialize(const property &prop, Iter out) {
+    using namespace mqtt5;
+    using namespace mqtt5::type;
     varlen_integer vi(static_cast<std::uint8_t>(prop.id));
-    out = mqtt5::serialize(vi, out);
+    out = serialize(vi, out);
 #define CASE(X)                                                                                    \
     case detail::uint8_to_property_id<X>:                                                          \
         return detail::property_traits<X>::value_serializer::template serialize(prop, out)
@@ -157,24 +168,29 @@ template <class Iter>
     }
 }
 
-template<class Iter>
+template <class Iter>
 Iter serialize(const std::vector<property> &properties, Iter out) {
+    using namespace mqtt5;
+    using namespace mqtt5::type;
+
     varlen_integer property_length(
         std::accumulate(properties.begin(), properties.end(), 0u, [](auto acc, const auto &prop) {
-            return acc + mqtt5::serialized_size_of(prop);
+            return acc + serialized_size_of(prop);
         }));
-    out = mqtt5::serialize(property_length, out);
+    out = serialize(property_length, out);
     for (const auto &property : properties) {
-        out = mqtt5::serialize(property, out);
+        out = serialize(property, out);
     }
     return out;
 }
 
 template <class Iter>
 [[nodiscard]] Iter deserialize_into(property &prop, Iter begin, Iter end) {
+    using namespace mqtt5;
+    using namespace mqtt5::type;
     varlen_integer vi;
     begin = deserialize_into(vi, begin, end);
-    prop.id = vi.value();
+    prop.id = static_cast<property_id>(vi.value());
 #define CASE(X)                                                                                    \
     case detail::uint8_to_property_id<X>:                                                          \
         return detail::property_traits<X>::value_serializer::deserialize_into(prop, begin, end)
@@ -211,4 +227,21 @@ template <class Iter>
 #undef CASE
     }
 }
+
+template <class Iter>
+[[nodiscard]] Iter deserialize_into(std::vector<property> &properties, Iter begin, Iter end) {
+    using namespace mqtt5;
+    using namespace mqtt5::type;
+
+    varlen_integer proplen;
+    begin = deserialize_into(proplen, begin, end);
+    end = begin + proplen.value();
+    while (begin != end) {
+        property prop;
+        begin = deserialize_into(prop, begin, end);
+        properties.push_back(prop);
+    }
+    return end;
+}
+} // namespace type
 } // namespace mqtt5

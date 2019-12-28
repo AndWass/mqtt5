@@ -52,6 +52,17 @@ template<class Iter>
 }
 
 template<class Iter>
+[[nodiscard]] Iter deserialize_into(bool &b, Iter begin, Iter end)
+{
+    if(begin == end) {
+        throw std::length_error("not enough data to deserialize");
+    }
+    b = static_cast<bool>(*begin);
+    ++begin;
+    return begin;
+}
+
+template<class Iter>
 [[nodiscard]] Iter serialize(std::uint8_t byte, Iter out) {
     *out = byte;
     ++out;
@@ -71,7 +82,7 @@ template<class Iter>
 
 template<class T>
 [[nodiscard]] std::uint32_t serialized_size_of(const T& value) {
-    using mqtt5::serialize;
+    using mqtt5::type::serialize;
     count_iterator iter;
     return static_cast<std::uint32_t>(serialize(value, iter).count);
 }

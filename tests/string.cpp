@@ -1,11 +1,11 @@
 #include <doctest/doctest.h>
 
-#include <mqtt5/string.hpp>
+#include <mqtt5/type/string.hpp>
 
 TEST_CASE("string: rejects u+0000")
 {
     char ch = '\0';
-    REQUIRE_THROWS_AS(mqtt5::string(&ch, &ch+1), std::invalid_argument);
+    REQUIRE_THROWS_AS(mqtt5::type::string(&ch, &ch+1), std::invalid_argument);
 }
 
 TEST_CASE("string: rejects u+d800 up to u+dfff")
@@ -14,14 +14,16 @@ TEST_CASE("string: rejects u+d800 up to u+dfff")
     {
         for(int j=0x80; j<=0xBF; j++)
         {
-            REQUIRE_THROWS_AS(mqtt5::string({0xED, i, j}), std::invalid_argument);
+            REQUIRE_THROWS_AS(mqtt5::type::string({0xED, i, j}), std::invalid_argument);
         }
     }
 }
 
 TEST_CASE("string: serialize UTF string")
 {
-    mqtt5::string str("A\xF0\xAA\x9B\x94");
+    using namespace mqtt5;
+    using namespace mqtt5::type;
+    mqtt5::type::string str("A\xF0\xAA\x9B\x94");
     std::array<std::uint8_t, 16> serialized;
     auto iter = serialize(str, serialized.begin());
     REQUIRE(serialized[0] == 0);
@@ -36,7 +38,9 @@ TEST_CASE("string: serialize UTF string")
 
 TEST_CASE("string: serialize ascii string")
 {
-    mqtt5::string str("hello");
+    using namespace mqtt5;
+    using namespace mqtt5::type;
+    mqtt5::type::string str("hello");
     std::array<std::uint8_t, 16> serialized;
     auto iter = serialize(str, serialized.begin());
     REQUIRE(serialized[0] == 0);
@@ -51,8 +55,8 @@ TEST_CASE("string: serialize ascii string")
 
 TEST_CASE("string: assignment operator")
 {
-    mqtt5::string a("hello");
-    mqtt5::string b("world");
+    mqtt5::type::string a("hello");
+    mqtt5::type::string b("world");
     a = b;
     REQUIRE(a == "world");
     a = "hello";

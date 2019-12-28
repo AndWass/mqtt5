@@ -1,6 +1,9 @@
-#include "mqtt5/connect.hpp"
+#include "mqtt5/message/connect.hpp"
 
 #include <doctest/doctest.h>
+#include <iostream>
+#include <string_view>
+#include <set>
 
 TEST_CASE("connect: serializing of non-normative example")
 {
@@ -15,7 +18,7 @@ TEST_CASE("connect: serializing of non-normative example")
     example.client_id = "hello_world";
     std::vector<std::uint8_t> serialized_example;
     (void)mqtt5::serialize(example, std::back_inserter(serialized_example));
-    REQUIRE(serialized_example.size() == 16+2+example.client_id.byte_size());
+    REQUIRE(serialized_example.size() >= 16+2+example.client_id.byte_size());
     std::size_t i=0;
     REQUIRE(serialized_example[i++] == 0);
     REQUIRE(serialized_example[i++] == 4);
@@ -39,4 +42,20 @@ TEST_CASE("connect: serializing of non-normative example")
     for(auto ch: example.client_id) {
         REQUIRE(serialized_example[i++] == ch);
     }
+}
+
+TEST_CASE("check client_id generation implementation")
+{
+    std::set<std::string> client_ids;
+    for(int i=0; i<10'000; i++) {
+        auto id = mqtt5::connect::generate_client_id();
+        REQUIRE(id.byte_size() <= 23);
+        REQUIRE(std::all_of(id.byte_begin(), id.byte_end(), [](auto ch) {
+            using namespace std::string_view_literals;
+             static auto valid_characters = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"sv;
+             return valid_characters.find(ch) != std::string_view::npos;
+        }));
+        client_ids.emplace(id.to_string());
+    }
+    REQUIRE(client_ids.size() == 10'000);
 }

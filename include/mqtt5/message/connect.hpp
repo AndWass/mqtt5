@@ -8,9 +8,10 @@
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
-#include "property.hpp"
 #include "serialize.hpp"
-#include "string.hpp"
+
+#include "mqtt5/type/property.hpp"
+#include "mqtt5/type/string.hpp"
 
 namespace mqtt5
 {
@@ -52,18 +53,18 @@ struct will_data
 {
     struct properties_type
     {
-        string content_type;
-        string response_topic;
-        binary correlation_data;
-        std::vector<key_value_pair> user_properties;
+        type::string content_type;
+        type::string response_topic;
+        type::binary correlation_data;
+        std::vector<type::key_value_pair> user_properties;
         std::chrono::duration<std::uint32_t> delay_interval{0};
         std::optional<std::chrono::duration<std::uint32_t>> message_expiry_interval;
-        std::uint8_t payload_format_indicator{0};
+        type::integer8 payload_format_indicator{0};
     };
 
     properties_type properties;
-    string topic;
-    binary payload;
+    type::string topic;
+    type::binary payload;
 };
 
 class connect
@@ -73,20 +74,20 @@ public:
     will_data will;
     connect_flags flags;
     std::chrono::seconds keep_alive = std::chrono::seconds{240};
-    integer32 session_expiry_interval{0};
-    integer16 receive_maximum{65535};
-    integer32 maximum_packet_size{varlen_integer::max_value};
-    integer16 topic_alias_maximum{0};
+    type::integer32 session_expiry_interval{0};
+    type::integer16 receive_maximum{65535};
+    type::integer32 maximum_packet_size{type::varlen_integer::max_value};
+    type::integer16 topic_alias_maximum{0};
     bool request_response_information = false;
     bool request_problem_information = false;
-    std::vector<key_value_pair> user_properties;
-    string authentication_method;
-    binary authentication_data;
-    string client_id;
-    string username;
-    string password;
+    std::vector<type::key_value_pair> user_properties;
+    type::string authentication_method;
+    type::binary authentication_data;
+    type::string client_id;
+    type::string username;
+    type::string password;
 
-    static string generate_client_id() noexcept {
+    static type::string generate_client_id() noexcept {
         static const std::string_view string_characters =
             "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
         auto uuid1 = boost::uuids::random_generator()();
@@ -105,7 +106,7 @@ public:
         add_uuid(uuid1);
         add_uuid(uuid2);
 
-        return string{retval};
+        return type::string{retval};
     }
 
 private:
@@ -113,12 +114,14 @@ private:
 
 template <class Iter>
 [[nodiscard]] Iter serialize(const will_data &will, Iter out) {
+    using namespace mqtt5;
+    using namespace type;
     std::vector<property> properties;
     if (will.properties.delay_interval.count() > 0) {
         properties.emplace_back(property_id::will_delay_interval,
                                 integer32{will.properties.delay_interval.count()});
     }
-    if (will.properties.payload_format_indicator) {
+    if (will.properties.payload_format_indicator.value()) {
         properties.emplace_back(property_id::payload_format_indicator,
                                 will.properties.payload_format_indicator);
     }
@@ -138,15 +141,17 @@ template <class Iter>
     for (auto &up : will.properties.user_properties) {
         properties.emplace_back(property_id::user_property, up);
     }
-    out = mqtt5::serialize(properties, out);
-    out = mqtt5::serialize(will.topic, out);
-    return mqtt5::serialize(will.payload, out);
+    out = serialize(properties, out);
+    out = serialize(will.topic, out);
+    return serialize(will.payload, out);
 }
 
 template <class Iter>
 [[nodiscard]] Iter serialize(const connect &c, Iter out) {
+    using namespace mqtt5;
+    using namespace type;
     string mqtt_string("MQTT");
-    out = mqtt5::serialize(mqtt_string, out);
+    out = serialize(mqtt_string, out);
     *out = connect::protocol_version_5;
     ++out;
     *out = c.flags.to_flags_byte();
@@ -155,7 +160,7 @@ template <class Iter>
         throw std::invalid_argument("Keep alive must not be greater than 65535");
     }
     integer16 i16(static_cast<std::uint16_t>(c.keep_alive.count()));
-    out = mqtt5::serialize(i16, out);
+    out = serialize(i16, out);
 
     std::vector<property> properties;
 #define MAYBE_ADD_PROPERTY(X, V)                                                                   \
@@ -167,10 +172,10 @@ template <class Iter>
     MAYBE_ADD_PROPERTY(topic_alias_maximum, 0)
 #undef MAYBE_ADD_PROPERTY
     if (c.request_response_information) {
-        properties.emplace_back(property_id::request_response_information, std::uint8_t(1));
+        properties.emplace_back(property_id::request_response_information, integer8(1));
     }
     if (c.request_problem_information) {
-        properties.emplace_back(property_id::request_problem_information, std::uint8_t(1));
+        properties.emplace_back(property_id::request_problem_information, integer8(1));
     }
     if (!c.authentication_method.empty()) {
         properties.emplace_back(property_id::authentication_method, c.authentication_method);
@@ -181,21 +186,21 @@ template <class Iter>
         properties.emplace_back(property_id::user_property, up);
     }
 
-    out = mqtt5::serialize(properties, out);
-    out = mqtt5::serialize(c.client_id, out);
+    out = serialize(properties, out);
+    out = serialize(c.client_id, out);
 
     if(c.flags.will_flag)
     {
-        out = mqtt5::serialize(c.will, out);
+        out = serialize(c.will, out);
     }
 
     if(c.flags.username)
     {
-        out = mqtt5::serialize(c.username, out);
+        out = serialize(c.username, out);
     }
     if(c.flags.password)
     {
-        out = mqtt5::serialize(c.password, out);
+        out = serialize(c.password, out);
     }
 
     return out;

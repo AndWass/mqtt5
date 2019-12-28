@@ -2,13 +2,15 @@
 
 #include <cstdint>
 #include <exception>
+#include <limits>
 #include <nonstd/span.hpp>
 #include <type_traits>
-#include <limits>
 
-#include "serialize.hpp"
+#include "mqtt5/message/serialize.hpp"
 
 namespace mqtt5
+{
+namespace type
 {
 struct variable_length_tag
 {
@@ -49,7 +51,8 @@ public:
 
 private:
     static_assert(std::disjunction_v<std::is_same<BackingType, std::uint16_t>,
-                                     std::is_same<BackingType, std::uint32_t>>);
+                                     std::is_same<BackingType, std::uint32_t>,
+                                     std::is_same<BackingType, std::uint8_t>>);
     value_type value_ = 0;
 };
 
@@ -62,10 +65,9 @@ public:
     constexpr integer() noexcept = default;
     constexpr explicit integer(value_type value) noexcept : value_(value) {
     }
-    constexpr explicit integer(
-        nonstd::span<const std::uint8_t> data,
-        std::size_t* bytes_used = nullptr) {
-        if(data.empty()) {
+    constexpr explicit integer(nonstd::span<const std::uint8_t> data,
+                               std::size_t *bytes_used = nullptr) {
+        if (data.empty()) {
             throw std::length_error("not enough data to deserialize a varlen_integer");
         }
 
@@ -86,7 +88,7 @@ public:
             }
             multiplier *= 128;
         } while (encoded_byte & 128);
-        if(bytes_used) {
+        if (bytes_used) {
             *bytes_used = byte_counter;
         }
     }
@@ -178,8 +180,9 @@ template <class Iter>
     return begin + bytes_used;
 }
 
+using integer8 = integer<std::uint8_t>;
 using integer16 = integer<std::uint16_t>;
 using integer32 = integer<std::uint32_t>;
 using varlen_integer = integer<variable_length_tag>;
-
+} // namespace type
 } // namespace mqtt5
