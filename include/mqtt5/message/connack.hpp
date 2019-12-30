@@ -71,13 +71,19 @@ template <class Iter>
 
 template <class Iter>
 [[nodiscard]] Iter deserialize_into(connack &c, Iter begin, Iter end) {
-    using namespace mqtt5;
-    using namespace mqtt5::type;
-    begin = mqtt5::deserialize_into(c.session_present, begin, end);
+    using property_id = type::property_id;
+    using type::binary;
+    using type::key_value_pair;
+    using type::string;
+    using type::integer8;
+    using type::integer16;
+    using type::integer32;
+
+    begin = type::deserialize_into(c.session_present, begin, end);
     begin = mqtt5::deserialize_into(c.reason_code, begin, end);
 
     std::vector<mqtt5::type::property> properties;
-    begin = deserialize_into(properties, begin, end);
+    begin = type::deserialize_into(properties, begin, end);
     for (const auto &prop : properties) {
         switch (prop.id) {
         case property_id::session_expiry_interval:

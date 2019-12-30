@@ -167,17 +167,15 @@ inline auto end(string &s) {
 
 template <class Iter>
 [[nodiscard]] Iter serialize(const string &str, Iter out) {
-    using namespace mqtt5;
-    using namespace mqtt5::type;
     integer16 size(static_cast<std::uint16_t>(str.byte_size()));
-    out = serialize(size, out);
+    out = type::serialize(size, out);
     return std::copy(str.byte_begin(), str.byte_end(), out);
 }
 
 template <class Iter>
 [[nodiscard]] Iter deserialize_into(string &str, Iter begin, Iter end) {
     integer16 size;
-    begin = deserialize_into(size, begin, end);
+    begin = type::deserialize_into(size, begin, end);
     auto data_left = end - begin;
     if (data_left < size.value()) {
         throw std::length_error("not enough data to deserialize a string");

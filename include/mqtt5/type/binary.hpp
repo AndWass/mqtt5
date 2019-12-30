@@ -152,14 +152,14 @@ template <class Iter>
 [[nodiscard]] Iter serialize(const binary &bin, Iter out) {
     using mqtt5::type::serialize;
     integer16 size(static_cast<std::uint16_t>(bin.size()));
-    out = serialize(size, out);
+    out = type::serialize(size, out);
     return std::copy(bin.begin(), bin.end(), out);
 }
 
 template <class Iter>
 [[nodiscard]] Iter deserialize_into(binary &bin, Iter begin, Iter end) {
     integer16 size;
-    begin = deserialize_into(size, begin, end);
+    begin = type::deserialize_into(size, begin, end);
     auto data_left = end - begin;
     if (data_left < size.value()) {
         throw std::length_error("not enough data to deserialize a string");

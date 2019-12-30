@@ -9,7 +9,6 @@ namespace mqtt5
 {
 namespace type
 {
-}
 namespace detail
 {
 struct sink
@@ -78,12 +77,15 @@ template <class Iter>
         data.reserve(cnt);
         return std::copy(begin, begin + cnt, std::back_inserter(data));
     }
+} // namespace type
+
+namespace message {}
 
 template <class T>
 [[nodiscard]] std::uint32_t serialized_size_of(const T &value) {
-    using namespace mqtt5;
-    using namespace mqtt5::type;
-    count_iterator iter;
+    using namespace type;
+    using namespace message;
+    type::count_iterator iter;
     return static_cast<std::uint32_t>(serialize(value, iter).count);
 }
 } // namespace mqtt5

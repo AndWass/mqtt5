@@ -112,10 +112,19 @@ public:
 private:
 };
 
+namespace detail
+{
 template <class Iter>
 [[nodiscard]] Iter serialize(const will_data &will, Iter out) {
-    using namespace mqtt5;
-    using namespace type;
+    using type::property;
+    using type::property_id;
+    using type::binary;
+    using type::key_value_pair;
+    using type::string;
+    using type::integer8;
+    using type::integer16;
+    using type::integer32;
+
     std::vector<property> properties;
     if (will.properties.delay_interval.count() > 0) {
         properties.emplace_back(property_id::will_delay_interval,
@@ -141,17 +150,22 @@ template <class Iter>
     for (auto &up : will.properties.user_properties) {
         properties.emplace_back(property_id::user_property, up);
     }
-    out = serialize(properties, out);
-    out = serialize(will.topic, out);
-    return serialize(will.payload, out);
+    out = type::serialize(properties, out);
+    out = type::serialize(will.topic, out);
+    return type::serialize(will.payload, out);
+}
 }
 
 template <class Iter>
 [[nodiscard]] Iter serialize(const connect &c, Iter out) {
-    using namespace mqtt5;
-    using namespace type;
+    using type::string;
+    using type::integer8;
+    using type::integer16;
+    using type::integer32;
+    using type::varlen_integer;
+
     string mqtt_string("MQTT");
-    out = serialize(mqtt_string, out);
+    out = type::serialize(mqtt_string, out);
     *out = connect::protocol_version_5;
     ++out;
     *out = c.flags.to_flags_byte();
@@ -160,47 +174,44 @@ template <class Iter>
         throw std::invalid_argument("Keep alive must not be greater than 65535");
     }
     integer16 i16(static_cast<std::uint16_t>(c.keep_alive.count()));
-    out = serialize(i16, out);
+    out = type::serialize(i16, out);
 
-    std::vector<property> properties;
+    std::vector<type::property> properties;
 #define MAYBE_ADD_PROPERTY(X, V)                                                                   \
     if (c.X.value() != V)                                                                          \
-        properties.emplace_back(property_id::X, c.X);
+        properties.emplace_back(type::property_id::X, c.X);
     MAYBE_ADD_PROPERTY(session_expiry_interval, 0)
     MAYBE_ADD_PROPERTY(receive_maximum, 65535)
     MAYBE_ADD_PROPERTY(maximum_packet_size, varlen_integer::max_value)
     MAYBE_ADD_PROPERTY(topic_alias_maximum, 0)
 #undef MAYBE_ADD_PROPERTY
     if (c.request_response_information) {
-        properties.emplace_back(property_id::request_response_information, integer8(1));
+        properties.emplace_back(type::property_id::request_response_information, integer8(1));
     }
     if (c.request_problem_information) {
-        properties.emplace_back(property_id::request_problem_information, integer8(1));
+        properties.emplace_back(type::property_id::request_problem_information, integer8(1));
     }
     if (!c.authentication_method.empty()) {
-        properties.emplace_back(property_id::authentication_method, c.authentication_method);
-        properties.emplace_back(property_id::authentication_data, c.authentication_data);
+        properties.emplace_back(type::property_id::authentication_method, c.authentication_method);
+        properties.emplace_back(type::property_id::authentication_data, c.authentication_data);
     }
 
     for (auto &up : c.user_properties) {
-        properties.emplace_back(property_id::user_property, up);
+        properties.emplace_back(type::property_id::user_property, up);
     }
 
-    out = serialize(properties, out);
-    out = serialize(c.client_id, out);
+    out = type::serialize(properties, out);
+    out = type::serialize(c.client_id, out);
 
-    if(c.flags.will_flag)
-    {
-        out = serialize(c.will, out);
+    if (c.flags.will_flag) {
+        out = detail::serialize(c.will, out);
     }
 
-    if(c.flags.username)
-    {
-        out = serialize(c.username, out);
+    if (c.flags.username) {
+        out = type::serialize(c.username, out);
     }
-    if(c.flags.password)
-    {
-        out = serialize(c.password, out);
+    if (c.flags.password) {
+        out = type::serialize(c.password, out);
     }
 
     return out;
