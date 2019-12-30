@@ -2,7 +2,7 @@
 #include <doctest/doctest.h>
 
 #include "mqtt5/type/integer.hpp"
-#include "mqtt5/message/serialize.hpp"
+#include "mqtt5/type/serialize.hpp"
 #include "mqtt5/type/string.hpp"
 #include <string>
 

@@ -6,7 +6,7 @@
 #include <nonstd/span.hpp>
 #include <type_traits>
 
-#include "mqtt5/message/serialize.hpp"
+#include "mqtt5/type/serialize.hpp"
 
 namespace mqtt5
 {

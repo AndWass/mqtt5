@@ -8,7 +8,7 @@
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
-#include "serialize.hpp"
+#include "mqtt5/type/serialize.hpp"
 
 #include "mqtt5/type/property.hpp"
 #include "mqtt5/type/string.hpp"

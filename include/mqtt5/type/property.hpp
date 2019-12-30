@@ -2,7 +2,7 @@
 
 #include "binary.hpp"
 #include "integer.hpp"
-#include "mqtt5/message/serialize.hpp"
+#include "serialize.hpp"
 #include "string.hpp"
 
 #include <numeric>

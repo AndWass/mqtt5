@@ -4,7 +4,7 @@
 
 #include "mqtt5/type/integer.hpp"
 #include "mqtt5/type/property.hpp"
-#include "serialize.hpp"
+#include "mqtt5/type/serialize.hpp"
 
 #include <chrono>
 #include <optional>
