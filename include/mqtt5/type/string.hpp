@@ -3,6 +3,7 @@
 #include <boost/stl_interfaces/iterator_interface.hpp>
 #include <initializer_list>
 #include <string>
+#include <string_view>
 #include <type_traits>
 
 #include <nonstd/span.hpp>
@@ -27,6 +28,13 @@ public:
         storage_ = std::move(str);
         validate();
     }
+    explicit string(std::string_view str) : storage_(str) {
+        validate();
+    }
+    explicit string(const char *str) : storage_(str) {
+        validate();
+    }
+
     explicit string(nonstd::span<const std::uint8_t> data) : string(data.begin(), data.end()) {
     }
 
@@ -186,6 +194,11 @@ template <class Iter>
 
 struct key_value_pair
 {
+    key_value_pair() = default;
+    template <typename KeyString, typename ValueString>
+    key_value_pair(KeyString &&k, ValueString &&v)
+        : key(std::forward<KeyString>(k)), value(std::forward<ValueString>(v)) {
+    }
     string key;
     string value;
 };

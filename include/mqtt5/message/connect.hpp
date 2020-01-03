@@ -13,17 +13,19 @@
 #include "mqtt5/type/property.hpp"
 #include "mqtt5/type/string.hpp"
 
+#include "mqtt5/publish.hpp"
+
 namespace mqtt5
 {
-enum class quality_of_service : std::uint8_t { qos0 = 0, qos1, qos2, reserved };
-
+namespace message
+{
 struct connect_flags
 {
     connect_flags() = default;
     connect_flags(std::uint8_t flags) {
         clean_start = flags & 0x02;
         will_flag = flags & 0x04;
-        will_qos = static_cast<quality_of_service>((flags & 0x18) >> 3);
+        will_qos = static_cast<publish::quality_of_service>((flags & 0x18) >> 3);
         will_retain = flags & 0x20;
         password = flags & 0x40;
         username = flags & 0x80;
@@ -43,7 +45,7 @@ struct connect_flags
     }
     bool clean_start = true;
     bool will_flag = false;
-    quality_of_service will_qos = quality_of_service::qos0;
+    publish::quality_of_service will_qos = publish::quality_of_service::qos0;
     bool will_retain = false;
     bool password = false;
     bool username = false;
@@ -65,6 +67,22 @@ struct will_data
     properties_type properties;
     type::string topic;
     type::binary payload;
+
+    will_data& operator=(const mqtt5::publish& pub) {
+        properties.content_type = pub.content_type;
+        properties.response_topic = pub.response_topic;
+        properties.correlation_data = pub.correlation_data;
+        for(const auto &kv: pub.user_properties)
+        {
+            properties.user_properties.emplace_back(kv.first, kv.second);
+        }
+        //properties.user_properties = pub.user_properties;
+        properties.message_expiry_interval = pub.message_expiry_interval;
+        properties.payload_format_indicator = pub.payload_format_indicator;
+        topic = pub.topic_name;
+        payload = pub.payload;
+        return *this;
+    }
 };
 
 class connect
@@ -215,5 +233,6 @@ template <class Iter>
     }
 
     return out;
+}
 }
 } // namespace mqtt5

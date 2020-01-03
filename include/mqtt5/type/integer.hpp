@@ -93,6 +93,9 @@ public:
         }
     }
 
+    template<class Iter>
+    integer(Iter begin, Iter end): integer(nonstd::span<const std::uint8_t>(&(*begin), end-begin)) {}
+
     template <class Integer>
     constexpr integer(integer<Integer> value) noexcept : value_(value.value()) {
     }

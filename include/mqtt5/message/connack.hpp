@@ -11,6 +11,8 @@
 
 namespace mqtt5
 {
+namespace message
+{
 class connack
 {
 public:
@@ -80,7 +82,7 @@ template <class Iter>
     using type::integer32;
 
     begin = type::deserialize_into(c.session_present, begin, end);
-    begin = mqtt5::deserialize_into(c.reason_code, begin, end);
+    begin = deserialize_into(c.reason_code, begin, end);
 
     std::vector<mqtt5::type::property> properties;
     begin = type::deserialize_into(properties, begin, end);
@@ -144,5 +146,5 @@ template <class Iter>
     }
     return begin;
 }
-
+} // namespace message
 } // namespace mqtt5

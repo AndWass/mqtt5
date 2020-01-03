@@ -75,7 +75,8 @@ template <class Iter>
             throw std::length_error("not enough data to deserialize vector");
         }
         data.reserve(cnt);
-        return std::copy(begin, begin + cnt, std::back_inserter(data));
+        std::copy(begin, begin + cnt, std::back_inserter(data));
+        return begin+cnt;
     }
 } // namespace type
 

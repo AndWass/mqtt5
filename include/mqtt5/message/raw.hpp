@@ -13,17 +13,26 @@ namespace message
 {
 struct raw
 {
+private:
+    void set_connect(const connect &conn) {
+        type = packet_type::connect;
+        flags = 0;
+        data.clear();
+        (void)serialize(conn, std::back_inserter(data));
+    }
+public:
+    raw() = default;
+    raw(const connect &conn) {
+        set_connect(conn);
+    }
     packet_type type = packet_type::reserved;
     std::uint8_t flags = 0;
     std::vector<std::uint8_t> data;
 
     std::vector<std::uint8_t> to_bytes() const noexcept;
 
-    raw &operator=(const mqtt5::connect &rhs) {
-        type = packet_type::connect;
-        flags = 0;
-        data.clear();
-        (void)serialize(rhs, std::back_inserter(data));
+    raw &operator=(const connect &rhs) {
+        set_connect(rhs);
         return *this;
     }
 
