@@ -16,19 +16,19 @@ TEST_CASE("binary: Construction of too big throws")
     {
         REQUIRE_THROWS_AS([&]() {
             mqtt5::type::binary bin(vec);
-        }(), std::length_error);
+        }(), boost::system::system_error);
     }
     SUBCASE("vector move")
     {
         REQUIRE_THROWS_AS([&]() {
             mqtt5::type::binary bin(std::move(vec));
-        }(), std::length_error);
+        }(), boost::system::system_error);
     }
     SUBCASE("iterator construction")
     {
         REQUIRE_THROWS_AS([&]() {
             mqtt5::type::binary bin(vec.begin(), vec.end());
-        }(), std::length_error);
+        }(), boost::system::system_error);
     }
 }
 
@@ -38,25 +38,25 @@ TEST_CASE("binary: insert that grows too big")
     mqtt5::type::binary bin(vec);
     SUBCASE("insert 1 value")
     {
-        REQUIRE_THROWS_AS(bin.insert(bin.end(), 10), std::length_error);
+        REQUIRE_THROWS_AS(bin.insert(bin.end(), 10), boost::system::system_error);
     }
     SUBCASE("insert initializer list")
     {
         mqtt5::type::binary bin2(vec.begin(), vec.begin() + 65530);
-        REQUIRE_THROWS_AS(bin2.insert(bin2.end(), {1,2,3,4,5,6,7,8}), std::length_error);
+        REQUIRE_THROWS_AS(bin2.insert(bin2.end(), {1,2,3,4,5,6,7,8}), boost::system::system_error);
     }
     SUBCASE("insert initializer iterator range")
     {
         mqtt5::type::binary bin2(vec.begin(), vec.begin() + 65530);
-        REQUIRE_THROWS_AS(bin2.insert(bin2.end(), vec.begin(), vec.begin() + 10), std::length_error);
+        REQUIRE_THROWS_AS(bin2.insert(bin2.end(), vec.begin(), vec.begin() + 10), boost::system::system_error);
     }
     SUBCASE("push_back")
     {
-        REQUIRE_THROWS_AS(bin.push_back(10), std::length_error);
+        REQUIRE_THROWS_AS(bin.push_back(10), boost::system::system_error);
     }
     SUBCASE("push_front")
     {
-        REQUIRE_THROWS_AS(bin.push_front(10), std::length_error);
+        REQUIRE_THROWS_AS(bin.push_front(10), boost::system::system_error);
     }
 }
 

@@ -5,7 +5,7 @@
 TEST_CASE("string: rejects u+0000")
 {
     char ch = '\0';
-    REQUIRE_THROWS_AS(mqtt5::type::string(&ch, &ch+1), std::invalid_argument);
+    REQUIRE_THROWS_AS(mqtt5::type::string(&ch, &ch+1), boost::system::system_error);
 }
 
 TEST_CASE("string: rejects u+d800 up to u+dfff")
@@ -14,7 +14,7 @@ TEST_CASE("string: rejects u+d800 up to u+dfff")
     {
         for(int j=0x80; j<=0xBF; j++)
         {
-            REQUIRE_THROWS_AS(mqtt5::type::string({0xED, i, j}), std::invalid_argument);
+            REQUIRE_THROWS_AS(mqtt5::type::string({0xED, i, j}), boost::system::system_error);
         }
     }
 }

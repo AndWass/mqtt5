@@ -71,7 +71,7 @@ template <class Iter>
     return type::deserialize_into(ph.data, remaining_length.value(), begin, end);
 }
 
-std::vector<std::uint8_t> raw::to_bytes() const noexcept {
+inline std::vector<std::uint8_t> raw::to_bytes() const noexcept {
     std::vector<std::uint8_t> retval;
     (void)message::serialize(*this, std::back_inserter(retval));
     return retval;

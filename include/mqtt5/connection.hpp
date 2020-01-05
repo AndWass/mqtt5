@@ -25,6 +25,28 @@ namespace mqtt5
 {
 namespace net = boost::asio;
 
+inline std::string generate_client_id() noexcept {
+        static const std::string_view string_characters =
+            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        auto uuid1 = boost::uuids::random_generator()();
+        auto uuid2 = boost::uuids::random_generator()();
+        std::string retval;
+
+        auto add_uuid = [&retval](const auto &uuid) {
+            for (auto b : uuid) {
+                if (retval.size() == 23) {
+                    break;
+                }
+                retval += string_characters[b % string_characters.size()];
+            }
+        };
+
+        add_uuid(uuid1);
+        add_uuid(uuid2);
+
+        return retval;
+    }
+
 template <typename SockType>
 class connection
 {
@@ -115,29 +137,6 @@ public:
             mqtt5::write(socket_, con_, write_receiver);
         });
     } // namespace mqtt5
-
-    static std::string generate_client_id() noexcept {
-        static const std::string_view string_characters =
-            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        auto uuid1 = boost::uuids::random_generator()();
-        auto uuid2 = boost::uuids::random_generator()();
-        std::string retval;
-
-        auto add_uuid = [&retval](const auto &uuid) {
-            for (auto b : uuid) {
-                if (retval.size() == 23) {
-                    break;
-                }
-                retval += string_characters[b % string_characters.size()];
-            }
-        };
-
-        add_uuid(uuid1);
-        add_uuid(uuid2);
-
-        return retval;
-    }
-
 private:
     boost::asio::io_context::strand io_;
     SockType socket_;
