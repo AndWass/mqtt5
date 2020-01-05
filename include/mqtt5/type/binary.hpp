@@ -3,6 +3,9 @@
 #include <boost/stl_interfaces/container_interface.hpp>
 #include <vector>
 
+#include <boost/system/system_error.hpp>
+#include <boost/throw_exception.hpp>
+
 #include "integer.hpp"
 
 namespace mqtt5
@@ -16,7 +19,8 @@ class binary_validation
 public:
     void validate_size(std::size_t sz) {
         if (sz > max_size()) {
-            throw std::length_error("Maximum binary size is 65535");
+            boost::throw_exception(boost::system::system_error(
+                boost::system::errc::make_error_code(boost::system::errc::value_too_large)));
         }
     }
 
@@ -162,7 +166,8 @@ template <class Iter>
     begin = type::deserialize_into(size, begin, end);
     auto data_left = end - begin;
     if (data_left < size.value()) {
-        throw std::length_error("not enough data to deserialize a string");
+        boost::throw_exception(boost::system::system_error(
+            boost::system::errc::make_error_code(boost::system::errc::protocol_error)));
     }
     bin = binary(begin, begin + size.value());
     return begin + size.value();

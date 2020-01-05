@@ -5,15 +5,15 @@
 #include <numeric>
 #include <optional>
 
-#include <boost/uuid/random_generator.hpp>
-#include <boost/uuid/uuid_io.hpp>
-
 #include "mqtt5/type/serialize.hpp"
 
 #include "mqtt5/type/property.hpp"
 #include "mqtt5/type/string.hpp"
 
 #include "mqtt5/publish.hpp"
+
+#include <boost/throw_exception.hpp>
+#include <boost/system/system_error.hpp>
 
 namespace mqtt5
 {
@@ -68,15 +68,14 @@ struct will_data
     type::string topic;
     type::binary payload;
 
-    will_data& operator=(const mqtt5::publish& pub) {
+    will_data &operator=(const mqtt5::publish &pub) {
         properties.content_type = pub.content_type;
         properties.response_topic = pub.response_topic;
         properties.correlation_data = pub.correlation_data;
-        for(const auto &kv: pub.user_properties)
-        {
+        for (const auto &kv : pub.user_properties) {
             properties.user_properties.emplace_back(kv.first, kv.second);
         }
-        //properties.user_properties = pub.user_properties;
+        // properties.user_properties = pub.user_properties;
         properties.message_expiry_interval = pub.message_expiry_interval;
         properties.payload_format_indicator = pub.payload_format_indicator;
         topic = pub.topic_name;
@@ -104,28 +103,6 @@ public:
     type::string client_id;
     type::string username;
     type::string password;
-
-    static type::string generate_client_id() noexcept {
-        static const std::string_view string_characters =
-            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        auto uuid1 = boost::uuids::random_generator()();
-        auto uuid2 = boost::uuids::random_generator()();
-        std::string retval;
-
-        auto add_uuid = [&retval](const auto &uuid) {
-            for (auto b : uuid) {
-                if (retval.size() == 23) {
-                    break;
-                }
-                retval += string_characters[b % string_characters.size()];
-            }
-        };
-
-        add_uuid(uuid1);
-        add_uuid(uuid2);
-
-        return type::string{retval};
-    }
 
 private:
 };
@@ -189,7 +166,8 @@ template <class Iter>
     *out = c.flags.to_flags_byte();
     out++;
     if (c.keep_alive.count() > integer16::max_value) {
-        throw std::invalid_argument("Keep alive must not be greater than 65535");
+        boost::throw_exception(boost::system::system_error(
+                boost::system::errc::make_error_code(boost::system::errc::value_too_large)));
     }
     integer16 i16(static_cast<std::uint16_t>(c.keep_alive.count()));
     out = type::serialize(i16, out);
@@ -234,5 +212,5 @@ template <class Iter>
 
     return out;
 }
-}
+} // namespace message
 } // namespace mqtt5

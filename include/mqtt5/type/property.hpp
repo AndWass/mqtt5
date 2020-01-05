@@ -8,6 +8,9 @@
 #include <numeric>
 #include <variant>
 
+#include <boost/system/system_error.hpp>
+#include <boost/throw_exception.hpp>
+
 namespace mqtt5
 {
 namespace type
@@ -157,7 +160,8 @@ template <class Iter>
         CASE(41);
         CASE(42);
     default:
-        throw std::invalid_argument("cannot serialize unknown property");
+        boost::throw_exception(boost::system::system_error(
+                boost::system::errc::make_error_code(boost::system::errc::bad_message)));
 #undef CASE
     }
 }
@@ -212,7 +216,8 @@ template <class Iter>
         CASE(41);
         CASE(42);
     default:
-        throw std::invalid_argument("cannot serialize unknown property");
+        boost::throw_exception(boost::system::system_error(
+                boost::system::errc::make_error_code(boost::system::errc::protocol_error)));
 #undef CASE
     }
 }

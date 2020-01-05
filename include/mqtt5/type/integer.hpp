@@ -6,6 +6,9 @@
 #include <nonstd/span.hpp>
 #include <type_traits>
 
+#include <boost/system/system_error.hpp>
+#include <boost/throw_exception.hpp>
+
 #include "mqtt5/type/serialize.hpp"
 
 namespace mqtt5
@@ -28,7 +31,8 @@ public:
     constexpr explicit integer(nonstd::span<const std::uint8_t> data) {
         value_ = 0;
         if (static_cast<std::size_t>(data.size()) < sizeof(value_type)) {
-            throw std::length_error("not enought data to deserialize");
+            boost::throw_exception(boost::system::system_error(
+                boost::system::errc::make_error_code(boost::system::errc::protocol_error)));
         }
         for (std::size_t i = 0; i < sizeof(value_type); i++) {
             value_ <<= 8;
@@ -68,7 +72,8 @@ public:
     constexpr explicit integer(nonstd::span<const std::uint8_t> data,
                                std::size_t *bytes_used = nullptr) {
         if (data.empty()) {
-            throw std::length_error("not enough data to deserialize a varlen_integer");
+            boost::throw_exception(boost::system::system_error(
+                boost::system::errc::make_error_code(boost::system::errc::protocol_error)));
         }
 
         value_ = 0;
@@ -81,10 +86,12 @@ public:
             byte_counter++;
             value_ += (encoded_byte & 0x7f) * multiplier;
             if (multiplier > 128 * 128 * 128) {
-                throw std::invalid_argument("Buffer contains bad variable integer data");
+                boost::throw_exception(boost::system::system_error(
+                    boost::system::errc::make_error_code(boost::system::errc::protocol_error)));
             }
             else if ((encoded_byte & 128) && iter == data.end()) {
-                throw std::length_error("not enough data to deserialize a varlen_integer");
+                boost::throw_exception(boost::system::system_error(
+                    boost::system::errc::make_error_code(boost::system::errc::protocol_error)));
             }
             multiplier *= 128;
         } while (encoded_byte & 128);
@@ -93,8 +100,10 @@ public:
         }
     }
 
-    template<class Iter>
-    integer(Iter begin, Iter end): integer(nonstd::span<const std::uint8_t>(&(*begin), end-begin)) {}
+    template <class Iter>
+    integer(Iter begin, Iter end)
+        : integer(nonstd::span<const std::uint8_t>(&(*begin), end - begin)) {
+    }
 
     template <class Integer>
     constexpr integer(integer<Integer> value) noexcept : value_(value.value()) {

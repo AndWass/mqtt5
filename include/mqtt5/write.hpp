@@ -1,30 +1,39 @@
 #pragma once
 
-#include <boost/system/error_code.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/write.hpp>
+#include <boost/asio/post.hpp>
+#include <boost/system/error_code.hpp>
 
-#include <vector>
 #include <cstdint>
+#include <memory>
+#include <vector>
 
 #include "message/raw.hpp"
 
 namespace mqtt5
 {
-namespace net = boost::asio;
-template<class Stream>
-std::size_t write(Stream &stream, const message::raw &msg, boost::system::error_code &ec)
-{
-    std::vector<std::uint8_t> bytes;
-    (void)mqtt5::message::serialize(msg, std::back_inserter(bytes));
-    return net::write(stream, boost::asio::buffer(bytes), ec);
-}
+template <typename Stream, typename Receiver>
+void write(Stream &stream, const message::raw &msg, Receiver &&receiver) {
+    auto bytes = std::make_shared<std::vector<std::uint8_t>>();
+    auto rx = std::make_shared<std::remove_reference_t<Receiver>>(std::forward<Receiver>(receiver));
+    try {
+        (void)mqtt5::message::serialize(msg, std::back_inserter(*bytes));
+    }
+    catch (const boost::system::error_code &ec) {
+        net::post(stream.get_executor(), [ec, rx]() { rx->set_error(ec); });
+        return;
+    }
 
-template<class Stream>
-std::size_t write(Stream &stream, const message::raw &msg)
-{
-    std::vector<std::uint8_t> bytes;
-    (void)mqtt5::message::serialize(msg, std::back_inserter(bytes));
-    return net::write(stream, boost::asio::buffer(bytes));
+    net::async_write(stream, boost::asio::buffer(*bytes),
+                     [bytes, rx](const auto &ec, auto ignored) {
+                         (void)ignored;
+                         if (!ec) {
+                             rx->set_done();
+                         }
+                         else {
+                             rx->set_error(ec);
+                         }
+                     });
 }
-}
+} // namespace mqtt5

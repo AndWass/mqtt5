@@ -5,6 +5,9 @@
 
 #include <boost/stl_interfaces/iterator_interface.hpp>
 
+#include <boost/throw_exception.hpp>
+#include <boost/system/system_error.hpp>
+
 namespace mqtt5
 {
 namespace type
@@ -22,7 +25,8 @@ struct sink
 template <class Iter>
 void throw_if_empty(Iter begin, Iter end) {
     if (begin == end) {
-        throw std::length_error("not enough data to deserialize");
+        boost::throw_exception(boost::system::system_error(
+                boost::system::errc::make_error_code(boost::system::errc::protocol_error)));
     }
 }
 } // namespace detail
@@ -43,7 +47,8 @@ struct count_iterator
 template <class Iter>
 [[nodiscard]] Iter deserialize_into(std::uint8_t &byte, Iter begin, Iter end) {
     if (begin == end) {
-        throw std::length_error("not enough data to deserialize");
+        boost::throw_exception(boost::system::system_error(
+            boost::system::errc::make_error_code(boost::system::errc::protocol_error)));
     }
     byte = *begin;
     ++begin;
@@ -53,7 +58,8 @@ template <class Iter>
 template <class Iter>
 [[nodiscard]] Iter deserialize_into(bool &b, Iter begin, Iter end) {
     if (begin == end) {
-        throw std::length_error("not enough data to deserialize");
+        boost::throw_exception(boost::system::system_error(
+                boost::system::errc::make_error_code(boost::system::errc::protocol_error)));
     }
     b = static_cast<bool>(*begin);
     ++begin;
@@ -72,15 +78,18 @@ template <class Iter>
     deserialize_into(std::vector<std::uint8_t> &data, std::size_t cnt, Iter begin, Iter end) {
         auto data_left = end - begin;
         if (data_left < cnt) {
-            throw std::length_error("not enough data to deserialize vector");
+            boost::throw_exception(boost::system::system_error(
+                boost::system::errc::make_error_code(boost::system::errc::protocol_error)));
         }
         data.reserve(cnt);
         std::copy(begin, begin + cnt, std::back_inserter(data));
-        return begin+cnt;
+        return begin + cnt;
     }
 } // namespace type
 
-namespace message {}
+namespace message
+{
+}
 
 template <class T>
 [[nodiscard]] std::uint32_t serialized_size_of(const T &value) {

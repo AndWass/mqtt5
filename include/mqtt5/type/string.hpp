@@ -6,6 +6,9 @@
 #include <string_view>
 #include <type_traits>
 
+#include <boost/system/system_error.hpp>
+#include <boost/throw_exception.hpp>
+
 #include <nonstd/span.hpp>
 #include <utf8.h>
 
@@ -56,7 +59,9 @@ public:
                 return utf8::peek_next(pos_, end_);
             }
             catch (utf8::not_enough_room &err) {
-                throw std::runtime_error(err.what());
+                boost::throw_exception(
+                    boost::system::system_error(boost::system::errc::make_error_code(
+                        boost::system::errc::argument_out_of_domain)));
             }
         }
         iterator &operator+=(std::ptrdiff_t i) {
@@ -65,7 +70,8 @@ public:
                 return *this;
             }
             catch (utf8::not_enough_room &err) {
-                throw std::runtime_error(err.what());
+                boost::throw_exception(boost::system::system_error(
+                    boost::system::errc::make_error_code(boost::system::errc::no_buffer_space)));
             }
         }
 
@@ -78,7 +84,8 @@ public:
                 return 0 - utf8::distance(pos_, rhs.pos_);
             }
             catch (utf8::exception &e) {
-                throw std::runtime_error(e.what());
+                boost::throw_exception(boost::system::system_error(
+                boost::system::errc::make_error_code(boost::system::errc::io_error)));
             }
         }
 
@@ -134,7 +141,8 @@ public:
 
 private:
     void throw_bad_string() const {
-        throw std::invalid_argument("Bad UTF-8 formatted string");
+        boost::throw_exception(boost::system::system_error(
+                boost::system::errc::make_error_code(boost::system::errc::argument_out_of_domain)));
     }
 
     void validate() const {
@@ -186,7 +194,8 @@ template <class Iter>
     begin = type::deserialize_into(size, begin, end);
     auto data_left = end - begin;
     if (data_left < size.value()) {
-        throw std::length_error("not enough data to deserialize a string");
+        boost::throw_exception(boost::system::system_error(
+                boost::system::errc::make_error_code(boost::system::errc::protocol_error)));
     }
     str = string(begin, begin + size.value());
     return begin + size.value();

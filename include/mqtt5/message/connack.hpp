@@ -2,6 +2,9 @@
 
 #include <cstdint>
 
+#include <boost/throw_exception.hpp>
+#include <boost/system/system_error.hpp>
+
 #include "mqtt5/type/integer.hpp"
 #include "mqtt5/type/property.hpp"
 #include "mqtt5/type/serialize.hpp"
@@ -141,7 +144,8 @@ template <class Iter>
             c.authentication_data = std::get<binary>(prop.value);
             break;
         default:
-            throw std::runtime_error("unsupported property");
+            boost::throw_exception(boost::system::system_error(
+                boost::system::errc::make_error_code(boost::system::errc::protocol_error)));
         }
     }
     return begin;

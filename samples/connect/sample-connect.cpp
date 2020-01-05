@@ -2,6 +2,7 @@
 
 #include <mqtt5/connection.hpp>
 #include <boost/asio.hpp>
+#include <boost/asio/deadline_timer.hpp>
 
 #include <thread>
 
@@ -9,37 +10,67 @@ namespace asio = boost::asio;
 
 int main() {
     asio::io_context io;
+    
     asio::ip::tcp::resolver resolver(io);
+    asio::deadline_timer ping_timer(io);
     auto resolved = resolver.resolve("test.mosquitto.org", "1883");
 
-    mqtt5::connection<asio::ip::tcp::socket> connection(io);
+    using connection_type = mqtt5::connection<asio::ip::tcp::socket>;
+
+    connection_type connection(io);
     connection.will = mqtt5::publish{};
     connection.will->topic_name = "/andreastest";
     connection.will->set_payload("This is a last will");
-    connection.will_delay = std::chrono::seconds{30};
     connection.lowest_layer().connect(*resolved);
-    connection.handshake();
 
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    /*mqtt5::connect connect_packet;
-    connect_packet.client_id = connect_packet.generate_client_id();
-    mqtt5::binary_packet bp;
-    bp = connect_packet;
+    struct ping_handler {
+        asio::deadline_timer *timer;
+        connection_type *conn;
+        void operator()(const boost::system::error_code &ec) {
+            if(!ec) {
+                std::cout << "PING\n";
+                mqtt5::message::raw pingreq;
+                pingreq.type = mqtt5::packet_type::pingreq;
+                conn->write(std::move(pingreq), ping_handler{timer, conn});
+                //conn->ping_request(ping_handler{timer, conn});
+            }
+            else {
+                std::cout << "Timer error: " << ec.message() << "\n";
+            }
+        }
 
-    auto bytes = bp.to_bytes();
+        void set_done() {
+            timer->expires_from_now(boost::posix_time::seconds{15});
+            timer->async_wait(ping_handler{timer, conn});
+        }
+        void set_error(const boost::system::error_code &ec) {
+            std::cout << "PING ERROR " << ec.message() << "\n";
+        }
+    };
 
-    std::cout << "Sending connect packet with client id " << connect_packet.client_id.to_string() << std::endl;
+    struct read_receiver_type {
+        connection_type *conn;
+        asio::deadline_timer *timer;
+        void set_value(const mqtt5::message::raw &packet) {
+            std::cout << "Received packet " << (int)packet.type << "\n";
+            conn->read(read_receiver_type{conn, timer});
+        }
+        void set_error(const boost::system::error_code &ec) {
+            std::cout << "READ ERROR: " << ec.message() << "\n";
+        }
+    };
 
-    
-    asio::ip::tcp::socket socket(io);
-    //asio::ip::tcp::endpoint ep()
+    auto handshake_receiver = mqtt5::on_done_or_error([&]() {
+        std::cout << "Handshake done\n";
+        connection.read(read_receiver_type{&connection, &ping_timer});
+        ping_handler pinger{&ping_timer, &connection};
+        pinger.set_done();
+    },
+    [](const auto &ec){
+        std::cout << ec.message() << "\n";
+    });
 
-    socket.connect(*resolved);
-    asio::write(socket, asio::buffer(bytes));
-    bytes.clear();
-    bytes.resize(10);
-    auto amount_read = socket.read_some(asio::buffer(bytes));
-    bytes.resize(amount_read);
-    //auto amount_read = asio::read(socket, asio::buffer(bytes));
-    std::cout << "Read " << amount_read << " bytes" << std::endl;*/
+    connection.handshake(handshake_receiver);
+
+    io.run();
 }
