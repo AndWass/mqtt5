@@ -1,11 +1,13 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <exception>
 #include <limits>
 #include <nonstd/span.hpp>
 #include <type_traits>
 
+#include <boost/asio/read.hpp>
 #include <boost/system/system_error.hpp>
 #include <boost/throw_exception.hpp>
 
@@ -38,6 +40,11 @@ public:
             value_ <<= 8;
             value_ += data[i];
         }
+    }
+
+    template <class Iter>
+    integer(Iter begin, Iter end)
+        : integer(nonstd::span<const std::uint8_t>(&(*begin), end - begin)) {
     }
 
     template <class Integer>
@@ -101,8 +108,8 @@ public:
     }
 
     template <class Iter>
-    integer(Iter begin, Iter end)
-        : integer(nonstd::span<const std::uint8_t>(&(*begin), end - begin)) {
+    integer(Iter begin, Iter end, std::size_t *bytes_used = nullptr)
+        : integer(nonstd::span<const std::uint8_t>(&(*begin), end - begin), bytes_used) {
     }
 
     template <class Integer>
@@ -121,6 +128,11 @@ public:
 private:
     value_type value_ = 0;
 };
+
+using integer8 = integer<std::uint8_t>;
+using integer16 = integer<std::uint16_t>;
+using integer32 = integer<std::uint32_t>;
+using varlen_integer = integer<variable_length_tag>;
 
 #define MAKE_OPERATOR(X)                                                                           \
     template <class Backend, class Integer,                                                        \
@@ -168,6 +180,101 @@ template <class BackType, class Iter>
     return begin + sizeof(BackType);
 }
 
+namespace detail {
+    template <typename Integer>
+    struct integer_read_from_stream_impl
+    {
+        template <typename Stream, typename Receiver>
+        static void read_from_stream(Stream &stream, Receiver &&rx) {
+            struct read_state
+            {
+                using receiver_type = std::remove_reference_t<Receiver>;
+                std::array<std::uint8_t, sizeof(typename Integer::value_type)> storage;
+                receiver_type rx;
+                read_state(Receiver rx) : rx(std::forward<Receiver>(rx)) {
+                }
+            };
+            auto state = std::make_shared<read_state>(std::forward<Receiver>(rx));
+            boost::asio::async_read(stream, boost::asio::buffer(state->storage),
+                                    [state](const auto &ec, const auto sz) {
+                                        if (ec) {
+                                            state->rx.set_error(ec);
+                                        }
+                                        else {
+                                            try {
+                                                Integer value(state->storage.begin(),
+                                                              state->storage.end());
+                                                state->rx.set_value(value);
+                                            }
+                                            catch (boost::system::system_error &ec2) {
+                                                state->rx.set_error(ec2.code());
+                                            }
+                                        }
+                                    });
+        }
+    };
+
+    template <>
+    struct integer_read_from_stream_impl<varlen_integer>
+    {
+        template <typename Stream, typename Receiver>
+        static void read_from_stream(Stream &stream, Receiver &&rx) {
+            struct read_state : std::enable_shared_from_this<read_state>
+            {
+                using receiver_type = std::remove_reference_t<Receiver>;
+                std::array<std::uint8_t, 4> storage;
+                receiver_type rx;
+                std::uint8_t bytes_read = 0;
+                Stream *stream;
+                read_state(Receiver rx, Stream &stream)
+                    : rx(std::forward<Receiver>(rx)), stream(std::addressof(stream)) {
+                }
+
+                void read_one() {
+                    boost::asio::async_read(*stream, boost::asio::buffer(&storage[bytes_read], 1),
+                                            [me = this->shared_from_this()](
+                                                const auto &ec, auto sz) { me->handle_read(ec); });
+                }
+                void handle_read(const boost::system::error_code &ec) {
+                    if (ec) {
+                        rx.set_error(ec);
+                    }
+                    else {
+                        if ((storage[bytes_read] & 0x80) == 0) {
+                            try {
+                                varlen_integer value(storage.begin(),
+                                                     (storage.begin() + bytes_read + 1));
+                                rx.set_value(value);
+                            }
+                            catch (boost::system::system_error &err) {
+                                rx.set_error(err.code());
+                            }
+                        }
+                        else {
+                            bytes_read++;
+                            if (bytes_read == 4) {
+                                rx.set_error(boost::system::errc::make_error_code(
+                                    boost::system::errc::protocol_error));
+                            }
+                            else {
+                                read_one();
+                            }
+                        }
+                    }
+                }
+            };
+            auto state = std::make_shared<read_state>(std::forward<Receiver>(rx), stream);
+            state->read_one();
+        }
+    };
+}
+
+template <typename Integer, typename Stream, typename Receiver>
+void integer_from_stream(Stream &stream, Receiver &&rx) {
+    detail::integer_read_from_stream_impl<Integer>::template read_from_stream(
+        stream, std::forward<Receiver>(rx));
+}
+
 template <class Iter>
 [[nodiscard]] Iter serialize(integer<variable_length_tag> value, Iter out) {
     auto val = value.value();
@@ -191,10 +298,5 @@ template <class Iter>
     value = integer<variable_length_tag>(data, &bytes_used);
     return begin + bytes_used;
 }
-
-using integer8 = integer<std::uint8_t>;
-using integer16 = integer<std::uint16_t>;
-using integer32 = integer<std::uint32_t>;
-using varlen_integer = integer<variable_length_tag>;
 } // namespace type
 } // namespace mqtt5

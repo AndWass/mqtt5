@@ -5,7 +5,9 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <memory>
 
+#include <boost/asio/read.hpp>
 #include <boost/system/system_error.hpp>
 #include <boost/throw_exception.hpp>
 
@@ -199,6 +201,38 @@ template <class Iter>
     }
     str = string(begin, begin + size.value());
     return begin + size.value();
+}
+
+template <typename Stream, typename Receiver>
+void string_from_stream(Stream &stream, Receiver &&receiver) {
+    struct read_receiver {
+        Stream *stream;
+        std::remove_reference_t<Receiver> rx;
+
+        void set_value(integer16 i16) {
+            auto str = std::make_shared<std::vector<std::uint8_t>>();
+            str->resize(i16.value());
+            boost::asio::async_read(*stream, boost::asio::buffer(*str), [str, rx = std::forward<Receiver>(this->rx)](const auto &ec, auto sz) mutable {
+                if(ec) {
+                    rx.set_error(ec);
+                }
+                else {
+                    try {
+                        string validated(*str);
+                        rx.set_value(validated);
+                    }
+                    catch(boost::system::system_error &err) {
+                        rx.set_error(err.code());
+                    }
+                }
+            });
+        }
+        void set_error(const boost::system::error_code &ec) {
+            rx.set_error(ec);
+        }
+    };
+
+    integer_from_stream<integer16>(stream, read_receiver{std::addressof(stream), std::forward<Receiver>(receiver)});
 }
 
 struct key_value_pair

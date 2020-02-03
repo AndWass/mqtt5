@@ -1,6 +1,10 @@
 #include <doctest/doctest.h>
 
+#include <boost/beast/_experimental/test/stream.hpp>
+
 #include <mqtt5/type/string.hpp>
+
+#include "stream.hpp"
 
 TEST_CASE("string: rejects u+0000")
 {
@@ -64,4 +68,24 @@ TEST_CASE("string: assignment operator")
     std::string world = "world";
     a = world;
     REQUIRE(a == "world");
+}
+
+TEST_CASE("string: string_from_stream")
+{
+    boost::asio::io_context io;
+    boost::beast::test::stream rx(io);
+    boost::beast::test::stream tx(io);
+    std::uint8_t buffer[7]{
+        0,5,'h','e','l','l','o'
+    };
+    rx.connect(tx);
+
+    tx.write_some(boost::asio::buffer(buffer));
+
+    mqtt5::type::string str;
+    boost::system::error_code error;
+    mqtt5::type::string_from_stream(rx, value_receiver{str, error});
+    io.run();
+    REQUIRE_FALSE(error);
+    REQUIRE(str.to_string() == "hello");
 }

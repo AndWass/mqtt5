@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include <mqtt5/connection.hpp>
+#include <mqtt5/stream.hpp>
 #include <boost/asio.hpp>
 #include <boost/asio/deadline_timer.hpp>
 
@@ -16,8 +17,16 @@ int main() {
     auto resolved = resolver.resolve("test.mosquitto.org", "1883");
 
     using connection_type = mqtt5::connection<asio::ip::tcp::socket>;
+    using stream_type = mqtt5::stream<asio::ip::tcp::socket>;
 
-    connection_type connection(io);
+    stream_type stream(io);
+    stream.lowest_layer().connect(*resolved);
+    mqtt5::message::connect connect;
+    mqtt5::message::raw response;
+    stream.write(connect);
+    stream.read(response);
+    std::cout << (int)response.type << std::endl;
+    /*connection_type connection(io);
     connection.will = mqtt5::publish{};
     connection.will->topic_name = "/andreastest";
     connection.will->set_payload("This is a last will");
@@ -70,7 +79,7 @@ int main() {
         std::cout << ec.message() << "\n";
     });
 
-    connection.handshake(handshake_receiver);
+    connection.handshake(handshake_receiver);*/
 
     io.run();
 }
