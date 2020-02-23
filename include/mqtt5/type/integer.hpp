@@ -37,7 +37,9 @@ public:
                 boost::system::errc::make_error_code(boost::system::errc::protocol_error)));
         }
         for (std::size_t i = 0; i < sizeof(value_type); i++) {
-            value_ <<= 8;
+            if constexpr(sizeof(value_type) > 1) {
+                value_ <<= 8;
+            }
             value_ += data[i];
         }
     }

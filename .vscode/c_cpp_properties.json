@@ -6,7 +6,8 @@
                 "${workspaceFolder}/**"
             ],
             "defines": [],
-            "compilerPath": "/usr/bin/g++",
+            "compilerPath": "/usr/bin/clang++-9",
+            "compilerArgs": ["-std=c++17", "-stdlib=libc++"],
             "cStandard": "c11",
             "cppStandard": "c++17",
             "configurationProvider": "vector-of-bool.cmake-tools",

@@ -10,6 +10,7 @@ target_link_libraries(${PROJECT_NAME} INTERFACE
     CONAN_PKG::boost
     CONAN_PKG::utfcpp
     CONAN_PKG::stl_interfaces
+    CONAN_PKG::p0443
 )
 target_compile_features(${PROJECT_NAME} INTERFACE cxx_std_17)
 target_include_directories(${PROJECT_NAME} INTERFACE ${CMAKE_CURRENT_LIST_DIR}/include)

@@ -9,7 +9,9 @@ class Mqtt5(ConanFile):
     requires = ("span-lite/0.6.0",
         "boost/[>=1.71]@conan/stable",
         "utfcpp/3.1",
-        "stl_interfaces/master")
+        "stl_interfaces/master",
+        "p0443/0.0.2"
+        )
 
     def requirements(self):
         if self.options.build_tests:
