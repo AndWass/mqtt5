@@ -10,6 +10,7 @@
 
 #include <mqtt5_v2/transport/data_fetcher.hpp>
 #include <mqtt5_v2/transport/data_writer.hpp>
+#include <mqtt5_v2/protocol/error.hpp>
 
 #include <p0443_v2/transform.hpp>
 
@@ -24,7 +25,7 @@ struct fixed_int
 
     nonstd::span<const std::uint8_t> set_from_bytes(nonstd::span<const std::uint8_t> data) {
         if(data.size() < sizeof(data)) {
-            throw std::runtime_error("not enough bytes to convert to fixed_int");
+            throw protocol_error("not enough bytes to convert to fixed_int");
         }
         set_from_data(data);
         return data.subspan(sizeof(T));
@@ -48,17 +49,13 @@ struct fixed_int
         });
     }
 
-    template<class Stream>
-    auto serializer(transport::data_writer<Stream> writer) {
-        using writer_t = typename transport::data_writer<Stream>::writer_handle;
-
-        return writer.write_data([value = this->value](writer_t writer) {
-            std::uint32_t shift_amount = 8*(sizeof(value)-1);
-            for(std::size_t i=0; i<sizeof(T); i++) {
-                writer.push_back((value >> shift_amount) & 0x00FF);
-                shift_amount -= 8;
-            }
-        });
+    template<class Writer>
+    void serialize(Writer&& writer) const {
+        std::uint32_t shift_amount = 8*(sizeof(value)-1);
+        for(std::size_t i=0; i<sizeof(T); i++) {
+            writer((value >> shift_amount) & 0x00FF);
+            shift_amount -= 8;
+        }
     }
 };
 }

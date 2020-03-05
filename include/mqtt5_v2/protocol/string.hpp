@@ -11,6 +11,8 @@
 #include <utf8.h>
 
 #include <mqtt5_v2/protocol/fixed_int.hpp>
+#include <mqtt5_v2/protocol/error.hpp>
+
 #include <p0443_v2/sequence.hpp>
 #include <p0443_v2/then.hpp>
 
@@ -92,10 +94,27 @@ struct string
         fixed_int<std::uint16_t> length;
         data = length.set_from_bytes(data);
         if(data.size() < length.value) {
-            throw std::runtime_error("not enough bytes to convert to string");
+            throw protocol_error("not enough bytes to convert to string");
         }
         value_ = std::string(reinterpret_cast<const char*>(data.data()), std::size_t(length.value));
         return data.subspan(length.value);
+    }
+
+    template<class Writer>
+    void serialize(Writer&& writer) const {
+        fixed_int<std::uint16_t> len;
+        auto &ref = value();
+        len.value = ref.size();
+        len.serialize(writer);
+        for(auto& b: ref) {
+            writer(b);
+        }
+    }
+
+    template<class T, std::enable_if_t<std::is_constructible_v<std::string, T>>* = nullptr>
+    string& operator=(T&& rhs) {
+        value_.emplace<1>(std::forward<T>(rhs));
+        return *this;
     }
 
 private:
@@ -122,6 +141,12 @@ struct key_value_pair
     nonstd::span<const std::uint8_t> set_from_bytes(nonstd::span<const std::uint8_t> data) {
         data = key_.set_from_bytes(data);
         return value_.set_from_bytes(data);
+    }
+
+    template<class Writer>
+    void serialize(Writer&& writer) const {
+        key_.serialize(writer);
+        value_.serialize(writer);
     }
 private:
     string key_;

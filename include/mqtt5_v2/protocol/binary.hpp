@@ -11,6 +11,8 @@
 #include <utf8.h>
 
 #include <mqtt5_v2/protocol/fixed_int.hpp>
+#include <mqtt5_v2/protocol/error.hpp>
+
 #include <p0443_v2/then.hpp>
 
 namespace mqtt5_v2
@@ -55,10 +57,26 @@ struct binary
         fixed_int<std::uint16_t> length;
         data = length.set_from_bytes(data);
         if(data.size() < length.value) {
-            throw std::runtime_error("not enough bytes to convert to binary");
+            throw protocol_error("not enough bytes to convert to binary");
         }
         value_ = std::vector<std::uint8_t>(data.begin(), data.begin() + length.value);
         return data.subspan(length.value);
+    }
+
+    template<class Writer>
+    void serialize(Writer&& writer) const {
+        fixed_int<std::uint16_t> len;
+        auto &ref = value();
+        len.value = ref.size();
+        len.serialize(writer);
+        for(auto& b: ref) {
+            writer(b);
+        }
+    }
+
+    binary& operator=(const nonstd::span<const std::uint8_t> data) {
+        value_.emplace<1>(data.begin(), data.end());
+        return *this;
     }
 
 private:

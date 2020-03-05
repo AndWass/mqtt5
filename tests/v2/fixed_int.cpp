@@ -8,6 +8,8 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/beast/_experimental/test/stream.hpp>
 
+#include "vector_serialize.hpp"
+
 TEST_CASE("fixed_int: single byte deserialized")
 {
     mqtt5_v2::protocol::fixed_int<std::uint8_t> fixed_byte;
@@ -26,6 +28,16 @@ TEST_CASE("fixed_int: single byte deserialized")
     p0443_v2::start(op);
     io.run();
     REQUIRE(fixed_byte.value == 0xa9);
+}
+
+TEST_CASE("fixed_int: single byte serialized")
+{
+    mqtt5_v2::protocol::fixed_int<std::uint8_t> fixed_byte;
+    REQUIRE(fixed_byte.value == 0);
+    fixed_byte.value = 129;
+    auto vector = vector_serialize(fixed_byte);
+    REQUIRE(vector.size() == 1);
+    REQUIRE(vector[0] == 129);
 }
 
 TEST_CASE("fixed_int: 2-byte type deserialized")
@@ -49,6 +61,16 @@ TEST_CASE("fixed_int: 2-byte type deserialized")
     REQUIRE(fixed_byte.value == 0xa9c2);
 }
 
+TEST_CASE("fixed_int: two byte serialized")
+{
+    mqtt5_v2::protocol::fixed_int<std::uint16_t> fixed_byte;
+    fixed_byte.value =  0xa9c2;
+    auto vector = vector_serialize(fixed_byte);
+    REQUIRE(vector.size() == 2);
+    REQUIRE(vector[0] == 0xa9);
+    REQUIRE(vector[1] == 0xc2);
+}
+
 TEST_CASE("fixed_int: 4-byte type deserialized")
 {
     mqtt5_v2::protocol::fixed_int<std::uint32_t> fixed_byte;
@@ -68,4 +90,16 @@ TEST_CASE("fixed_int: 4-byte type deserialized")
 
     io.run();
     REQUIRE(fixed_byte.value == 0xa9c29715);
+}
+
+TEST_CASE("fixed_int: four byte serialized")
+{
+    mqtt5_v2::protocol::fixed_int<std::uint32_t> fixed_byte;
+    fixed_byte.value =  0xa9c29715;
+    auto vector = vector_serialize(fixed_byte);
+    REQUIRE(vector.size() == 4);
+    REQUIRE(vector[0] == 0xa9);
+    REQUIRE(vector[1] == 0xc2);
+    REQUIRE(vector[2] == 0x97);
+    REQUIRE(vector[3] == 0x15);
 }

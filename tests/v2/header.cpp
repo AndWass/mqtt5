@@ -8,8 +8,9 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/beast/_experimental/test/stream.hpp>
 
-TEST_CASE("header: inplace_deserialize")
-{
+#include "vector_serialize.hpp"
+
+TEST_CASE("header: inplace_deserialize") {
     boost::asio::io_context io;
     boost::beast::test::stream tx_stream(io);
     boost::beast::test::stream rx_stream(io);
@@ -33,7 +34,7 @@ TEST_CASE("header: inplace_deserialize")
         REQUIRE(value.flags() == 0x09);
 
         REQUIRE(buffer.size() == 2);
-        auto *ptr = static_cast<const std::uint8_t*>(buffer.cdata().data());
+        auto *ptr = static_cast<const std::uint8_t *>(buffer.cdata().data());
         REQUIRE(ptr[0] == 0x9b);
         REQUIRE(ptr[1] == 0x8a);
     }
@@ -54,8 +55,31 @@ TEST_CASE("header: inplace_deserialize")
         REQUIRE(value.flags() == 0x09);
         REQUIRE(value.remaining_length() == 0x7f);
         REQUIRE(buffer.size() == 2);
-        auto *ptr = static_cast<const std::uint8_t*>(buffer.cdata().data());
+        auto *ptr = static_cast<const std::uint8_t *>(buffer.cdata().data());
         REQUIRE(ptr[0] == 0xa8);
         REQUIRE(ptr[1] == 0xb9);
+    }
+}
+
+TEST_CASE("header: serliaze") {
+    mqtt5_v2::protocol::header hdr;
+    hdr.set_flags(0x0b);
+    hdr.set_type(0x0c);
+    SUBCASE("single byte remaining length") {
+        hdr.set_remaining_length(2);
+        auto vector = vector_serialize(hdr);
+        REQUIRE(vector.size() == 2);
+        REQUIRE(vector[0] == 0xcb);
+        REQUIRE(vector[1] == 2);
+    }
+    SUBCASE("maximum remaining length") {
+        hdr.set_remaining_length(mqtt5_v2::protocol::varlen_int::max_value());
+        auto vector = vector_serialize(hdr);
+        REQUIRE(vector.size() == 5);
+        REQUIRE(vector[0] == 0xcb);
+        REQUIRE(vector[1] == 0xff);
+        REQUIRE(vector[2] == 0xff);
+        REQUIRE(vector[3] == 0xff);
+        REQUIRE(vector[4] == 0x7f);
     }
 }

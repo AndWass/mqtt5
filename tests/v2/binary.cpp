@@ -9,6 +9,8 @@
 
 #include <doctest/doctest.h>
 
+#include "vector_serialize.hpp"
+
 /*TEST_CASE("string: inplace_deserialize")
 {
     boost::asio::io_context io;
@@ -57,4 +59,21 @@ TEST_CASE("binary: inplace_deserialize")
     REQUIRE(val[3] == 4);
     REQUIRE(val[4] == 5);
     REQUIRE(rx_buffer.size() == 2);
+}
+
+TEST_CASE("binary: serialize")
+{
+    mqtt5_v2::protocol::binary bin;
+    std::uint8_t data[5] = {1,2,3,4,5};
+    bin = data;
+
+    auto vec = vector_serialize(bin);
+    REQUIRE(vec.size() == 7);
+    REQUIRE(vec[0] == 0);
+    REQUIRE(vec[1] == 5);
+    REQUIRE(vec[2] == 1);
+    REQUIRE(vec[3] == 2);
+    REQUIRE(vec[4] == 3);
+    REQUIRE(vec[5] == 4);
+    REQUIRE(vec[6] == 5);
 }

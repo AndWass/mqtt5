@@ -81,6 +81,14 @@ struct property
                                   value_deserialize_sender<Stream>{this, data});
     }
 
+    template<class Writer>
+    void serialize(Writer& writer) const {
+        identifier.serialize(writer);
+        std::visit([&](auto& v) {
+            v.serialize(writer);
+        }, value);
+    }
+
     void activate_id(std::uint8_t id) {
 #define ACTIVATE(X)                                                                                \
     value.emplace<X>();                                                                            \
@@ -177,6 +185,31 @@ struct properties
         }
         storage_ = std::move(new_properties);
         return data;
+    }
+
+    const std::vector<property>& properties_ref() const {
+        static std::vector<property> empty;
+        if(storage_.index() == 0) {
+            return empty;
+        }
+        return std::get<1>(storage_);
+    }
+
+    template<class Writer>
+    void serialize(Writer& writer) const {
+        varlen_int prop_len;
+        auto len_finder = [&](std::uint8_t) {
+            prop_len.value++;
+        };
+        // Find the length of the contained properties
+        for(auto& p: properties_ref()) {
+            p.serialize(len_finder);
+        }
+
+        prop_len.serialize(writer);
+        for(auto& p: properties_ref()) {
+            p.serialize(writer);
+        }
     }
 
 private:

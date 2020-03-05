@@ -8,6 +8,7 @@
 
 #include <cstdint>
 
+#include <mqtt5_v2/protocol/error.hpp>
 #include <mqtt5_v2/transport/data_fetcher.hpp>
 
 namespace mqtt5_v2
@@ -18,30 +19,48 @@ struct varlen_int
 {
     std::uint32_t value;
 
-    template<class Stream>
+    static constexpr std::uint32_t max_value() {
+        return 268'435'455;
+    }
+
+    template <class Stream>
     auto inplace_deserializer(transport::data_fetcher<Stream> data_fetcher) {
-        return data_fetcher.get_data_until(
-            [this](transport::data_fetcher<Stream> fetcher) {
-                if(fetcher.size() == 0) {
-                    return 1;
-                }
-                auto available_data = fetcher.cspan();
-                std::uint32_t data_used = 0;
-                if(this->try_set_from_data(available_data, data_used)) {
-                    fetcher.buffer->consume(data_used);
-                    return 0;
-                }
+        return data_fetcher.get_data_until([this](transport::data_fetcher<Stream> fetcher) {
+            if (fetcher.size() == 0) {
                 return 1;
             }
-        );
+            auto available_data = fetcher.cspan();
+            std::uint32_t data_used = 0;
+            if (this->try_set_from_data(available_data, data_used)) {
+                fetcher.buffer->consume(data_used);
+                return 0;
+            }
+            return 1;
+        });
     }
 
     nonstd::span<const std::uint8_t> set_from_bytes(nonstd::span<const std::uint8_t> data) {
         std::uint32_t data_used = 0;
-        if(!try_set_from_data(data, data_used)) {
-            throw std::runtime_error("bytes not convertible to varlen_int");
+        if (!try_set_from_data(data, data_used)) {
+            throw protocol_error("bytes not convertible to varlen_int");
         }
         return data.subspan(data_used);
+    }
+
+    template <class Writer>
+    void serialize(Writer&& writer) const {
+        if(value > max_value()) {
+            throw protocol_error("value exceeding maximum allowed for varlen int");
+        }
+        auto val = value;
+        do {
+            std::uint8_t byte = val % 128;
+            val /= 128;
+            if (val > 0) {
+                byte |= 0x80;
+            }
+            writer(byte);
+        } while (val > 0);
     }
 
 private:
@@ -51,24 +70,20 @@ private:
         auto iter = data.begin();
         data_used = 0;
         std::uint32_t encoded_byte;
-        do
-        {
+        do {
             encoded_byte = *iter++;
             data_used++;
             value += (encoded_byte & 127) * multiplier;
-            if (multiplier > 128*128*128) {
-                throw std::runtime_error("data overflow");
+            if (multiplier > 128 * 128 * 128) {
+                throw protocol_error("data overflow");
             }
-            else if(iter == data.end() && (encoded_byte & 128) != 0)
-            {
+            else if (iter == data.end() && (encoded_byte & 128) != 0) {
                 return false;
             }
             multiplier *= 128;
-        }
-        while ((encoded_byte & 128) != 0);
+        } while ((encoded_byte & 128) != 0);
         return true;
-
     }
 };
-}
-}
+} // namespace protocol
+} // namespace mqtt5_v2

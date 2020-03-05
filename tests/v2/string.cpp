@@ -7,6 +7,8 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/beast/_experimental/test/stream.hpp>
 
+#include "vector_serialize.hpp"
+
 TEST_CASE("string: inplace_deserialize")
 {
     boost::asio::io_context io;
@@ -27,4 +29,20 @@ TEST_CASE("string: inplace_deserialize")
     io.run();
     REQUIRE(string.is_valid());
     REQUIRE(string.value() == "hello");
+}
+
+TEST_CASE("string: serialize")
+{
+    mqtt5_v2::protocol::string string;
+    string = "hello";
+    REQUIRE(string.value() == "hello");
+    auto vec = vector_serialize(string);
+    REQUIRE(vec.size() == 7);
+    REQUIRE(vec[0] == 0);
+    REQUIRE(vec[1] == 5);
+    REQUIRE(vec[2] == 'h');
+    REQUIRE(vec[3] == 'e');
+    REQUIRE(vec[4] == 'l');
+    REQUIRE(vec[5] == 'l');
+    REQUIRE(vec[6] == 'o');
 }
