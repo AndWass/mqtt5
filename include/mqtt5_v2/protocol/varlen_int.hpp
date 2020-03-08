@@ -17,7 +17,33 @@ namespace protocol
 {
 struct varlen_int
 {
-    std::uint32_t value;
+    std::uint32_t value = 0;
+
+    template<class U, std::enable_if_t<std::is_integral_v<U>>* = nullptr>
+    operator U() const noexcept {
+        return static_cast<U>(value);
+    }
+
+    template<class U, std::enable_if_t<std::is_integral_v<U>>* = nullptr>
+    friend bool operator==(const varlen_int& lhs, const U& rhs) {
+        return lhs.value == rhs;
+    }
+
+    template<class U, std::enable_if_t<std::is_integral_v<U>>* = nullptr>
+    friend bool operator==(const U& lhs, const varlen_int& rhs) {
+        return lhs == rhs.value;
+    }
+
+    template<class U>
+    friend bool operator==(const varlen_int& lhs, const varlen_int& rhs) {
+        return lhs.value == rhs.value;
+    }
+
+    template<class U, std::enable_if_t<std::is_convertible_v<U, std::uint32_t>>* = nullptr>
+    varlen_int& operator=(U val) {
+        value = static_cast<std::uint32_t>(val);
+        return *this;
+    }
 
     static constexpr std::uint32_t max_value() {
         return 268'435'455;

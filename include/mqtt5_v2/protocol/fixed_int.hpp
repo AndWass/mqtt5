@@ -23,6 +23,39 @@ struct fixed_int
 {
     T value = 0;
 
+    fixed_int() noexcept = default;
+    fixed_int(T v): value(v) {}
+
+    operator T() const noexcept {
+        return value;
+    }
+
+    template<class U, std::enable_if_t<std::is_integral_v<U>>* = nullptr>
+    operator U() const noexcept {
+        return static_cast<U>(value);
+    }
+
+    template<class U, std::enable_if_t<std::is_integral_v<U>>* = nullptr>
+    friend bool operator==(const fixed_int& lhs, const U& rhs) {
+        return lhs.value == rhs;
+    }
+
+    template<class U, std::enable_if_t<std::is_integral_v<U>>* = nullptr>
+    friend bool operator==(const U& lhs, const fixed_int& rhs) {
+        return lhs == rhs.value;
+    }
+
+    template<class U>
+    friend bool operator==(const fixed_int<T>& lhs, const fixed_int<U>& rhs) {
+        return lhs.value == rhs.value;
+    }
+
+    template<class U, std::enable_if_t<std::is_convertible_v<U, T>>* = nullptr>
+    fixed_int& operator=(U val) {
+        value = static_cast<T>(val);
+        return *this;
+    }
+
     nonstd::span<const std::uint8_t> set_from_bytes(nonstd::span<const std::uint8_t> data) {
         if(data.size() < sizeof(data)) {
             throw protocol_error("not enough bytes to convert to fixed_int");

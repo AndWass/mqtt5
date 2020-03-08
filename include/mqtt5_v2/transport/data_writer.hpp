@@ -34,8 +34,6 @@ struct data_writer
         buffer_type *buffer_;
     };
 
-    
-
     template <class WriteFunction>
     auto write_data(WriteFunction &&pred) {
     }

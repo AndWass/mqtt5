@@ -152,6 +152,32 @@ struct property
 #undef ACTIVATE
     }
 
+    template<class T>
+    void set_id_value(std::uint8_t id, const T& val) {
+        activate_id(id);
+        identifier = id;
+        set_value(val);
+    }
+
+    template<class T>
+    void set_value(const T& val) {
+        std::visit([&](auto& elem) {
+            if constexpr(std::is_assignable_v<decltype(elem), T>) {
+                elem = val;
+            }
+            else {
+                throw std::runtime_error("Mismatched attempt to set property types");
+            }
+        }, value);
+    }
+
+    property() = default;
+
+    template<class T>
+    property(std::uint8_t id, const T& val) {
+        set_id_value(id, val);
+    }
+
     varlen_int identifier;
     value_storage value;
 
@@ -187,14 +213,6 @@ struct properties
         return data;
     }
 
-    const std::vector<property>& properties_ref() const {
-        static std::vector<property> empty;
-        if(storage_.index() == 0) {
-            return empty;
-        }
-        return std::get<1>(storage_);
-    }
-
     template<class Writer>
     void serialize(Writer& writer) const {
         varlen_int prop_len;
@@ -210,6 +228,30 @@ struct properties
         for(auto& p: properties_ref()) {
             p.serialize(writer);
         }
+    }
+
+    const std::vector<property>& properties_ref() const {
+        static const std::vector<property> empty;
+        if(storage_.index() == 0) {
+            return empty;
+        }
+        return std::get<1>(storage_);
+    }
+
+    void set_properties(std::vector<property> props) {
+        storage_ = std::move(props);
+    }
+
+    void add_property(property prop) {
+        if(storage_.index() != 1) {
+            storage_.template emplace<1>();
+        }
+        std::get<1>(storage_).emplace_back(std::move(prop));
+    }
+
+    template<class T>
+    void add_property(std::uint8_t id, const T& value) {
+        add_property(property(id, value));
     }
 
 private:

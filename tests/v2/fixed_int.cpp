@@ -4,6 +4,7 @@
 
 #include <doctest/doctest.h>
 #include <mqtt5_v2/protocol/fixed_int.hpp>
+#include <mqtt5_v2/protocol/inplace_deserializer.hpp>
 
 #include <boost/asio/io_context.hpp>
 #include <boost/beast/_experimental/test/stream.hpp>
@@ -102,4 +103,26 @@ TEST_CASE("fixed_int: four byte serialized")
     REQUIRE(vector[1] == 0xc2);
     REQUIRE(vector[2] == 0x97);
     REQUIRE(vector[3] == 0x15);
+}
+
+namespace mqtt5_v2::protocol {
+template<class T>
+std::ostream& operator<< (std::ostream& os, const mqtt5_v2::protocol::fixed_int<T>& value) {
+    os << value.value;
+    return os;
+}
+}
+
+TEST_CASE("fixed_int: conversions")
+{
+    mqtt5_v2::protocol::fixed_int<std::uint32_t> fixed_byte;
+    fixed_byte =  0xa9c29715;
+    REQUIRE(fixed_byte.value == 0xa9c29715);
+    int test = fixed_byte;
+    REQUIRE(test == fixed_byte.value);
+    REQUIRE(test == fixed_byte);
+    REQUIRE(fixed_byte == test);
+    fixed_byte = 10;
+    REQUIRE(fixed_byte == 10);
+    REQUIRE(fixed_byte.value == 10);
 }

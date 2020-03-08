@@ -19,6 +19,8 @@ add_executable(mqtt5-v2-tests
     v2/binary.cpp
     v2/header.cpp
     v2/properties.cpp
+    v2/connect.cpp
+    v2/optional_inplace_deserializer.cpp
 )
 
 target_link_libraries(mqtt5-tests PRIVATE 
