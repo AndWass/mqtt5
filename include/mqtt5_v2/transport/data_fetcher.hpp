@@ -7,6 +7,7 @@
 #pragma once
 
 #include <optional>
+#include <memory>
 
 #include <nonstd/span.hpp>
 

@@ -10,7 +10,7 @@ class Mqtt5(ConanFile):
         "boost/[>=1.71]@conan/stable",
         "utfcpp/3.1",
         "stl_interfaces/master",
-        "p0443/0.0.2"
+        "p0443/0.0.3"
         )
 
     def requirements(self):

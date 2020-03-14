@@ -14,6 +14,7 @@
 #include <p0443_v2/start.hpp>
 
 #include <boost/mp11/algorithm.hpp>
+#include <boost/mp11/bind.hpp>
 
 #include <tuple>
 #include <variant>
@@ -161,6 +162,13 @@ struct property
 
     template<class T>
     void set_value(const T& val) {
+        static_assert(
+            boost::mp11::mp_any_of<
+                value_storage,
+                boost::mp11::mp_bind_back<std::is_assignable, T>::template fn
+            >::value,
+            "T cannot be used to assign to any potential property value"
+        );
         std::visit([&](auto& elem) {
             if constexpr(std::is_assignable_v<decltype(elem), T>) {
                 elem = val;

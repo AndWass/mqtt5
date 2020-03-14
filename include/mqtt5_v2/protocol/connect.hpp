@@ -24,9 +24,9 @@ namespace mqtt5_v2::protocol
 struct connect
 {
     string always_mqtt;
-    fixed_int<std::uint8_t> version;
-    fixed_int<std::uint8_t> flags;
-    fixed_int<std::uint16_t> keep_alive;
+    fixed_int<std::uint8_t> version =  5;
+    fixed_int<std::uint8_t> flags = 0x02;
+    fixed_int<std::uint16_t> keep_alive = 240;
     properties connect_properties;
     string client_id;
     std::optional<properties> will_properties;
