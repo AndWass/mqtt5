@@ -46,13 +46,5 @@ struct connack
         hdr.serialize(writer);
         serialize_body(writer);
     }
-
-    /*operator control_packet() const {
-        control_packet retval;
-        retval.fixed_sized_header.set_type(2);
-        retval.fixed_sized_header.set_flags(0);
-        retval.set_payload_from_packet(*this);
-        return retval;
-    }*/
 };
 }

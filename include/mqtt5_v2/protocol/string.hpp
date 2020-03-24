@@ -86,7 +86,7 @@ struct string
                         std::size_t amount_to_get = std::get<0>(value_).value;
                         this->value_.emplace<1>(std::string(
                             reinterpret_cast<const char *>(data.cdata()), amount_to_get));
-                        data.buffer->consume(amount_to_get);
+                        data.consume(amount_to_get);
                         return data;
                     });
             });

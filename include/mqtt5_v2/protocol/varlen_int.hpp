@@ -34,7 +34,6 @@ struct varlen_int
         return lhs == rhs.value;
     }
 
-    template<class U>
     friend bool operator==(const varlen_int& lhs, const varlen_int& rhs) {
         return lhs.value == rhs.value;
     }
@@ -58,7 +57,7 @@ struct varlen_int
             auto available_data = fetcher.cspan();
             std::uint32_t data_used = 0;
             if (this->try_set_from_data(available_data, data_used)) {
-                fetcher.buffer->consume(data_used);
+                fetcher.consume(data_used);
                 return 0;
             }
             return 1;

@@ -14,6 +14,7 @@
 #include <p0443_v2/connect.hpp>
 #include <p0443_v2/start.hpp>
 #include <p0443_v2/set_value.hpp>
+#include <p0443_v2/transform.hpp>
 
 namespace mqtt5_v2::protocol
 {
@@ -73,6 +74,16 @@ auto inplace_deserializer(T &val, transport::data_fetcher<Stream> data_fetcher) 
 template<class T, class Stream>
 auto inplace_deserializer(std::optional<T>& val, transport::data_fetcher<Stream> data_fetcher) {
     return detail::optional_inplace_deserializer_sender<T, Stream>{std::addressof(val), data_fetcher};
+}
+
+template<class Stream>
+auto inplace_deserializer(std::vector<std::uint8_t>& val, transport::data_fetcher<Stream> data_fetcher) {
+    return p0443_v2::transform(data_fetcher.get_data(val.size()), [&val](auto fetcher) {
+        auto data_span = fetcher.cspan();
+        std::copy(data_span.begin(), data_span.end(), val.begin());
+        fetcher.consume(val.size());
+        return fetcher;
+    });
 }
 
 template<class T, class Fetcher>

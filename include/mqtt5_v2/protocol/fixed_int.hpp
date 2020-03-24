@@ -78,7 +78,7 @@ struct fixed_int
     auto inplace_deserializer(transport::data_fetcher<Stream> data_fetcher) {
         return p0443_v2::transform(data_fetcher.get_data(sizeof(T)), [this](transport::data_fetcher<Stream> data) {
             this->set_from_data(data.cspan());
-            data.buffer->consume(sizeof(T));
+            data.consume(sizeof(T));
             return data;
         });
     }

@@ -7,13 +7,14 @@
 #pragma once
 
 #include <cstdint>
+#include <utility>
 #include <variant>
 #include <vector>
 
 #include <utf8.h>
 
-#include <mqtt5_v2/protocol/fixed_int.hpp>
 #include <mqtt5_v2/protocol/error.hpp>
+#include <mqtt5_v2/protocol/fixed_int.hpp>
 
 #include <p0443_v2/then.hpp>
 
@@ -21,10 +22,21 @@ namespace mqtt5_v2
 {
 namespace protocol
 {
+using std::begin;
+using std::end;
 struct binary
 {
     binary() = default;
     explicit binary(const std::vector<std::uint8_t> &str) : value_(str) {
+    }
+
+    template <class IterB, class IterE>
+    explicit binary(IterB start, IterE end) : value_(std::in_place_index<1>, start, end) {
+    }
+
+    template <class Container, class = decltype(begin(std::declval<Container>())),
+              class = decltype(end(std::declval<Container>()))>
+    binary(std::in_place_t, Container &&c) : binary(begin(c), end(c)) {
     }
 
     const std::vector<std::uint8_t> &value() const {
@@ -49,7 +61,7 @@ struct binary
                         auto *data_begin = data.cdata();
                         auto *data_end = data_begin + amount_to_get;
                         this->value_.emplace<1>(std::vector<std::uint8_t>(data_begin, data_end));
-                        data.buffer->consume(amount_to_get);
+                        data.consume(amount_to_get);
                         return data;
                     });
             });
@@ -58,25 +70,25 @@ struct binary
     nonstd::span<const std::uint8_t> set_from_bytes(nonstd::span<const std::uint8_t> data) {
         fixed_int<std::uint16_t> length;
         data = length.set_from_bytes(data);
-        if(data.size() < length.value) {
+        if (data.size() < length.value) {
             throw protocol_error("not enough bytes to convert to binary");
         }
         value_ = std::vector<std::uint8_t>(data.begin(), data.begin() + length.value);
         return data.subspan(length.value);
     }
 
-    template<class Writer>
-    void serialize(Writer&& writer) const {
+    template <class Writer>
+    void serialize(Writer &&writer) const {
         fixed_int<std::uint16_t> len;
         auto &ref = value();
         len.value = ref.size();
         len.serialize(writer);
-        for(auto& b: ref) {
+        for (auto &b : ref) {
             writer(b);
         }
     }
 
-    binary& operator=(const nonstd::span<const std::uint8_t> data) {
+    binary &operator=(const nonstd::span<const std::uint8_t> data) {
         value_.emplace<1>(data.begin(), data.end());
         return *this;
     }

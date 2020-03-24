@@ -206,7 +206,7 @@ struct properties
                                                });
         return p0443_v2::transform(std::move(storage_resizer_), [this](auto data) {
             this->from_bytes(data.cspan().subspan(0, properties_length_.value));
-            data.buffer->consume(properties_length_.value);
+            data.consume(properties_length_.value);
             return data;
         });
     }
@@ -254,7 +254,21 @@ struct properties
         if(storage_.index() != 1) {
             storage_.template emplace<1>();
         }
-        std::get<1>(storage_).emplace_back(std::move(prop));
+        if(prop.identifier == 38) {
+            std::get<1>(storage_).emplace_back(std::move(prop));
+        }
+        else {
+            auto &ref = std::get<1>(storage_);
+            auto iter = std::find_if(ref.begin(), ref.end(), [&](auto &p) {
+                return p.identifier == prop.identifier;
+            });
+            if(iter != ref.end()) {
+                iter->value = std::move(prop.value);
+            }
+            else {
+                std::get<1>(storage_).emplace_back(std::move(prop));
+            }
+        }
     }
 
     template<class T>
