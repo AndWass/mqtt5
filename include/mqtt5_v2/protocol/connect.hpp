@@ -16,6 +16,7 @@
 #include <mqtt5_v2/protocol/inplace_deserializer.hpp>
 #include <mqtt5_v2/protocol/properties.hpp>
 #include <mqtt5_v2/protocol/string.hpp>
+#include <mqtt5_v2/protocol/header.hpp>
 
 #include <p0443_v2/sequence.hpp>
 
@@ -23,6 +24,8 @@ namespace mqtt5_v2::protocol
 {
 struct connect
 {
+    static constexpr std::uint8_t type_value = 1;
+
     string always_mqtt;
     fixed_int<std::uint8_t> version =  5;
     fixed_int<std::uint8_t> flags = 0x02;
@@ -50,8 +53,8 @@ struct connect
                                   protocol::inplace_deserializer(password, data_fetcher));
     }
 
-    template <class Writer>
-    void serialize(Writer &&writer) const {
+    template<class Writer>
+    void serialize_body(Writer&& writer) const {
         string always_mqtt("MQTT");
         always_mqtt.serialize(writer);
         version.serialize(writer);
@@ -70,6 +73,13 @@ struct connect
         optional_writer(will_payload);
         optional_writer(username);
         optional_writer(password);
+    }
+
+    template <class Writer>
+    void serialize(Writer &&writer) const {
+        header hdr(type_value, 0, *this);
+        hdr.serialize(writer);
+        serialize_body(writer);
     }
 };
 } // namespace mqtt5_v2::protocol

@@ -198,15 +198,15 @@ struct property
 struct properties
 {
     template <class Stream>
-    auto implace_deserializer(transport::data_fetcher<Stream> data) {
+    auto inplace_deserializer(transport::data_fetcher<Stream> data) {
         auto length_deserializer = properties_length_.inplace_deserializer(data);
         auto storage_resizer_ = p0443_v2::then(std::move(length_deserializer),
                                                [this](transport::data_fetcher<Stream> data) {
-                                                   storage_.emplace<0>(properties_length_.value);
                                                    return data.get_data(properties_length_.value);
                                                });
         return p0443_v2::transform(std::move(storage_resizer_), [this](auto data) {
-            this->from_bytes(std::get<0>(this->storage_));
+            this->from_bytes(data.cspan().subspan(0, properties_length_.value));
+            data.buffer->consume(properties_length_.value);
             return data;
         });
     }

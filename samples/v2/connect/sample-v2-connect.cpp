@@ -1,5 +1,7 @@
 #include <mqtt5_v2/protocol/control_packet.hpp>
 #include <mqtt5_v2/protocol/connect.hpp>
+#include <mqtt5_v2/protocol/connack.hpp>
+#include <mqtt5_v2/connection.hpp>
 
 #include <p0443_v2/await_sender.hpp>
 #include <p0443_v2/immediate_task.hpp>
@@ -15,27 +17,31 @@ namespace net = boost::asio;
 namespace ip = net::ip;
 using tcp = ip::tcp;
 
-p0443_v2::immediate_task mqtt_task(net::io_context& io) {
-    tcp::socket socket(io);
-    boost::beast::basic_flat_buffer<std::allocator<std::uint8_t>> read_buffer;
+template<class T>
+const char* signature() {
+    return __PRETTY_FUNCTION__;
+}
 
-    mqtt5_v2::protocol::control_packet packet_buffer;
-    mqtt5_v2::transport::data_fetcher<tcp::socket> fetcher(socket, read_buffer);
+void test(mqtt5_v2::protocol::control_packet& p) {
+    auto ack = std::get<mqtt5_v2::protocol::connack>(p.body());
+    std::cout << ack.properties.properties_ref().size() << std::endl;
+}
+
+p0443_v2::immediate_task mqtt_task(net::io_context& io) {
+    mqtt5_v2::connection<tcp::socket> connection(io);
 
     {
-    tcp::resolver resolver(io);
-    auto resolve_result = co_await p0443_v2::await_sender(p0443_v2::asio::resolve(resolver, "test.mosquitto.org", "1883"));
-    auto connected_ep = co_await p0443_v2::await_sender(p0443_v2::asio::connect_socket(socket, resolve_result));
-    std::cout <<  "Connected to " << connected_ep.address().to_string() << ":" << connected_ep.port() << "\n";
+        tcp::resolver resolver(io);
+        auto resolve_result = co_await p0443_v2::await_sender(p0443_v2::asio::resolve(resolver, "test.mosquitto.org", "1883"));
+        auto connected_ep = co_await p0443_v2::await_sender(p0443_v2::asio::connect_socket(connection.next_layer(), resolve_result));
+        std::cout <<  "Connected to " << connected_ep.address().to_string() << ":" << connected_ep.port() << "\n";
     }
-    packet_buffer = mqtt5_v2::protocol::connect{};
-    std::vector<std::uint8_t> write_buffer;
-    packet_buffer.serialize([&](auto b) {
-        write_buffer.push_back(b);
-    });
-    co_await p0443_v2::await_sender(p0443_v2::asio::write_all(socket, net::buffer(write_buffer)));
-    co_await p0443_v2::await_sender(packet_buffer.inplace_deserializer(fetcher));
-    std::cout << "Received type " << int(packet_buffer.fixed_sized_header.type()) << " with " << packet_buffer.rest_of_data.size() << " bytes of data\n";
+    std::cout << co_await p0443_v2::await_sender(connection.control_packet_writer(mqtt5_v2::protocol::connect{})) << " bytes written\n";
+    auto read_packet = co_await p0443_v2::await_sender(connection.control_packet_reader());
+    auto &body = read_packet.body();
+    test(read_packet);
+    std::cout << "Packet read with index " << read_packet.body().index() << std::endl;
+    //std::cout << "Received type " << int(read_packet.fixed_sized_header.type()) << " with " << read_packet.rest_of_data.size() << " bytes of data\n";
 }
 
 int main() {

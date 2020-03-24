@@ -6,50 +6,151 @@
 
 #pragma once
 
-#include <mqtt5_v2/protocol/header.hpp>
+#include <boost/mp11/algorithm.hpp>
+
+#include <mqtt5_v2/protocol/connack.hpp>
 #include <mqtt5_v2/protocol/connect.hpp>
+#include <mqtt5_v2/protocol/header.hpp>
+#include <mqtt5_v2/protocol/inplace_deserializer.hpp>
 
+#include <p0443_v2/just.hpp>
 #include <p0443_v2/then.hpp>
-
+#include <p0443_v2/type_traits.hpp>
+#include <type_traits>
 #include <vector>
+
+#include <boost/mp11/list.hpp>
+#include <p0443_v2/connect.hpp>
+#include <variant>
+
+namespace p0443_v2
+{
+template <class... SenderTypes>
+struct one_of_sender
+{
+    std::variant<SenderTypes...> senders_;
+
+    template <class T>
+    one_of_sender(T &&t) : senders_(std::forward<T>(t)) {
+    }
+
+    template <template <class...> class Tuple, template <class...> class Variant>
+    using value_types = boost::mp11::mp_unique<boost::mp11::mp_append<
+        typename p0443_v2::sender_traits<SenderTypes>::template value_types<Tuple, Variant>...>>;
+
+    template <template <class...> class Variant>
+    using error_types = boost::mp11::mp_unique<boost::mp11::mp_append<
+        typename p0443_v2::sender_traits<SenderTypes>::template error_types<Variant>...>>;
+
+    static constexpr bool sends_done = (p0443_v2::sender_traits<SenderTypes>::sends_dones || ...);
+
+    template <class Receiver>
+    struct operation
+    {
+        using next_operation_type =
+            std::variant<p0443_v2::operation_type<SenderTypes, Receiver>...>;
+        next_operation_type next_operation_;
+
+        void start() {
+            std::visit([](auto &op) { p0443_v2::start(op); }, next_operation_);
+        }
+    };
+
+    template <class Receiver>
+    auto connect(Receiver &&receiver) {
+        using op_type = operation<p0443_v2::remove_cvref_t<Receiver>>;
+        return op_type{std::visit(
+            [&](auto &&sender) -> typename op_type::next_operation_type {
+                auto next_op = p0443_v2::connect(std::forward<decltype(sender)>(sender),
+                                                 std::forward<Receiver>(receiver));
+                return {p0443_v2::connect((decltype(sender) &&)sender, (Receiver &&)(receiver))};
+            },
+            std::move(senders_))};
+    }
+};
+} // namespace p0443_v2
+
+#include <p0443_v2/sink_receiver.hpp>
 
 namespace mqtt5_v2::protocol
 {
 struct control_packet
 {
-    header fixed_sized_header;
-    std::vector<std::uint8_t> rest_of_data;
+private:
+    using body_storage_type = std::variant<connect, connack>;
+    template<class T>
+    using is_body_type = std::bool_constant<boost::mp11::mp_find<body_storage_type, T>::value !=
+                               boost::mp11::mp_size<body_storage_type>::value>;
 
-    template<class Stream>
+    header header_;
+    body_storage_type body_;
+public:
+    control_packet() = default;
+
+    template<class T, std::enable_if_t<is_body_type<T>::value>* = nullptr>
+    T* body_as() {
+        return std::get_if<T>(&body_);
+    }
+
+    template<class T, std::enable_if_t<is_body_type<T>::value>* = nullptr>
+    const T* body_as() const {
+        return std::get_if<T>(&body_);
+    }
+
+    template<class T, std::enable_if_t<is_body_type<T>::value>* = nullptr>
+    bool is_type() const {
+        return body_as<T>() != nullptr;
+    }
+
+    body_storage_type& body() {
+        return body_;
+    }
+
+    const body_storage_type& body() const {
+        return body_;
+    }
+
+    template <class Packet,
+              std::enable_if_t<boost::mp11::mp_find<body_storage_type, Packet>::value !=
+                               boost::mp11::mp_size<body_storage_type>::value> * = nullptr>
+    control_packet(Packet p) : body_(std::move(p)) {
+    }
+
+    template <class Stream>
     auto inplace_deserializer(transport::data_fetcher<Stream> data_fetcher) {
-        return p0443_v2::then(fixed_sized_header.inplace_deserializer(data_fetcher), [this](transport::data_fetcher<Stream> fetcher) {
-            return p0443_v2::transform(fetcher.get_data(fixed_sized_header.remaining_length()), [this](transport::data_fetcher<Stream> fetcher) {
-                auto data_span = fetcher.cspan();
-                std::size_t data_span_size = data_span.size();
-                rest_of_data.clear();
-                rest_of_data.reserve(data_span_size);
-                std::copy(data_span.begin(), data_span.end(), std::back_inserter(rest_of_data));
-            });
-        });
+        using bound_inplace_deserializer_for =
+            boost::mp11::mp_bind_back<inplace_deserializer_for, decltype(data_fetcher)>;
+        using return_type = boost::mp11::mp_append<
+            p0443_v2::one_of_sender<>,
+            boost::mp11::mp_transform<bound_inplace_deserializer_for::template fn,
+                                      body_storage_type>>;
+        
+        auto body_deserializer = [this, data_fetcher](auto fetcher) {
+            if (header_.type() == 1) {
+                body_.template emplace<0>();
+            }
+            else if (header_.type() == 2) {
+                body_.template emplace<1>();
+            }
+
+            return std::visit(
+                [this, data_fetcher](auto &p) {
+                    return return_type(p.inplace_deserializer(data_fetcher));
+                },
+                body_);
+        };
+
+        return p0443_v2::then(header_.inplace_deserializer(data_fetcher),
+                              body_deserializer);
     }
 
-    template<class Writer>
-    void serialize(Writer&& writer) const {
-        fixed_sized_header.serialize(writer);
-        for(const auto& d: rest_of_data) {
-            writer(d);
-        }
-    }
-
-    control_packet& operator=(const connect& c) {
-        rest_of_data.clear();
-        fixed_sized_header.set_type(1);
-        fixed_sized_header.set_flags(0);
-        c.serialize([this](auto b) {
-            rest_of_data.push_back(b);
-        });
-        fixed_sized_header.set_remaining_length(rest_of_data.size());
-        return *this;
+    template <class Writer>
+    void serialize(Writer &&writer) const {
+        std::visit(
+            [&](auto &d) {
+                d.serialize(writer);
+            },
+            body_);
     }
 };
-}
+} // namespace mqtt5_v2::protocol

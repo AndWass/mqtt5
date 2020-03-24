@@ -74,4 +74,8 @@ template<class T, class Stream>
 auto inplace_deserializer(std::optional<T>& val, transport::data_fetcher<Stream> data_fetcher) {
     return detail::optional_inplace_deserializer_sender<T, Stream>{std::addressof(val), data_fetcher};
 }
+
+template<class T, class Fetcher>
+using inplace_deserializer_for = decltype(inplace_deserializer(std::declval<T&>(), std::declval<Fetcher>()));
+
 }

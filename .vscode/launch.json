@@ -5,6 +5,22 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "type": "gdb",
+            "request": "launch",
+            "name": "Launch Program",
+            "target": "${command:cmake.launchTargetPath}",
+            "cwd": "${workspaceRoot}",
+            "valuesFormatting": "prettyPrinters"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Launch (lldb)",
+            "program": "${command:cmake.launchTargetPath}",
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
             "name": "(Windows) Launch",
             "type": "cppvsdbg",
             "request": "launch",
@@ -24,7 +40,7 @@
             "cwd": "${workspaceFolder}",
             "environment": [],
             "externalConsole": true,
-            "type": "cppdbg",
+            "type": "gdb",
             "MIMode": "gdb",
             "setupCommands": [
                 {

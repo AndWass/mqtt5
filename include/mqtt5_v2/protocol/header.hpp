@@ -15,6 +15,20 @@ namespace mqtt5_v2::protocol
 {
 struct header
 {
+    header() = default;
+
+    template<class P>
+    header(std::uint8_t type_, std::uint8_t flags_, const P& packet) {
+        set_type(type_);
+        set_flags(flags_);
+
+        std::uint32_t body_len = 0;
+        packet.serialize_body([&](auto) {
+            body_len++;
+        });
+        set_remaining_length(body_len);
+    }
+
     void set_type(std::uint8_t t) {
         type_flags_.value = flags() + (t << 4);
     }

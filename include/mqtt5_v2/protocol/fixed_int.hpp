@@ -57,7 +57,7 @@ struct fixed_int
     }
 
     nonstd::span<const std::uint8_t> set_from_bytes(nonstd::span<const std::uint8_t> data) {
-        if(data.size() < sizeof(data)) {
+        if(data.size() < sizeof(value)) {
             throw protocol_error("not enough bytes to convert to fixed_int");
         }
         set_from_data(data);
@@ -65,6 +65,7 @@ struct fixed_int
     }
 
     void set_from_data(nonstd::span<const std::uint8_t> data) {
+        value = 0;
         for (std::size_t i = 0; i < sizeof(T); i++) {
             if constexpr(sizeof(T) > 1) {
                 value <<= 8;
