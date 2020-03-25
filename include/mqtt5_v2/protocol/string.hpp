@@ -112,7 +112,7 @@ struct string
     void serialize(Writer &&writer) const {
         fixed_int<std::uint16_t> len;
         auto &ref = value();
-        len.value = ref.size();
+        len = ref.size();
         len.serialize(writer);
         for (auto &b : ref) {
             writer(b);

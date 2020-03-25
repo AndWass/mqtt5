@@ -105,7 +105,9 @@
         "xtree": "cpp",
         "xutility": "cpp",
         "*.ipp": "cpp",
-        "filesystem": "cpp"
+        "filesystem": "cpp",
+        "csetjmp": "cpp",
+        "valarray": "cpp"
     },
     "C_Cpp.intelliSenseCacheSize": 0
 }

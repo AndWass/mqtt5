@@ -44,7 +44,7 @@ struct one_of_sender
     using error_types = boost::mp11::mp_unique<boost::mp11::mp_append<
         typename p0443_v2::sender_traits<SenderTypes>::template error_types<Variant>...>>;
 
-    static constexpr bool sends_done = (p0443_v2::sender_traits<SenderTypes>::sends_dones || ...);
+    static constexpr bool sends_done = std::disjunction<std::bool_constant<p0443_v2::sender_traits<SenderTypes>::sends_done>...>::value;
 
     template <class Receiver>
     struct operation
@@ -72,14 +72,12 @@ struct one_of_sender
 };
 } // namespace p0443_v2
 
-#include <p0443_v2/sink_receiver.hpp>
-
 namespace mqtt5_v2::protocol
 {
 struct control_packet
 {
 private:
-    using body_storage_type = std::variant<connect, connack, publish, puback, subscribe>;
+    using body_storage_type = std::variant<connect, connack, publish, puback, subscribe, suback>;
     template<class T>
     using is_body_type = std::bool_constant<boost::mp11::mp_find<body_storage_type, T>::value !=
                                boost::mp11::mp_size<body_storage_type>::value>;
@@ -112,6 +110,12 @@ public:
         return body_;
     }
 
+    std::uint8_t packet_type() const {
+        return std::visit([](auto &p) {
+            return p.type_value;
+        }, body_);
+    }
+
     template <class Packet,
               std::enable_if_t<boost::mp11::mp_find<body_storage_type, Packet>::value !=
                                boost::mp11::mp_size<body_storage_type>::value> * = nullptr>
@@ -128,20 +132,26 @@ public:
                                       body_storage_type>>;
         
         auto body_deserializer = [this, data_fetcher](auto fetcher) {
-            if (header_.type() == 1) {
-                body_.template emplace<0>();
+            if (header_.type() == connect::type_value) {
+                body_.template emplace<connect>();
             }
-            else if (header_.type() == 2) {
-                body_.template emplace<1>();
+            else if (header_.type() == connack::type_value) {
+                body_.template emplace<connack>();
             }
-            else if (header_.type() == 3) {
-                body_.template emplace<2>(std::in_place, header_.flags(), header_.remaining_length());
+            else if (header_.type() == publish::type_value) {
+                body_.template emplace<publish>(std::in_place, header_.flags(), header_.remaining_length());
             }
-            else if (header_.type() == 4) {
-                body_.template emplace<3>(std::in_place, header_.remaining_length());
+            else if (header_.type() == puback::type_value) {
+                body_.template emplace<puback>(std::in_place, header_.remaining_length());
             }
             else if(header_.type() == subscribe::type_value) {
-                body_.template emplace<4>(std::in_place, header_.remaining_length());
+                body_.template emplace<subscribe>(std::in_place, header_.remaining_length());
+            }
+            else if(header_.type() == suback::type_value) {
+                body_.template emplace<suback>(std::in_place, header_.remaining_length());
+            }
+            else {
+                throw std::runtime_error("Received unknown control packet type");
             }
 
             return std::visit(

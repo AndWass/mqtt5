@@ -48,5 +48,5 @@ TEST_CASE("connect: inplace_deserializer")
     auto op = p0443_v2::connect(packet.inplace_deserializer(mqtt5_v2::transport::buffer_data_fetcher(data)), p0443_v2::sink_receiver{});
     op.start();
     REQUIRE(data.empty());
-    REQUIRE(packet.keep_alive == 10);
+    REQUIRE(packet.keep_alive.value == 10);
 }

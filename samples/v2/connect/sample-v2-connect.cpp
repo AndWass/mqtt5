@@ -29,8 +29,11 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io) {
                   << connected_ep.port() << "\n";
     }
 
+    using connect_packet = mqtt5_v2::protocol::connect;
+
     mqtt5_v2::protocol::connect connect;
-    connect.flags = 12; // Will QoS1 and Will flag
+    connect.flags = connect_packet::clean_start_flag | connect_packet::will_flag |
+                    connect_packet::will_qos_1;
     connect.will_topic = "/mqtt5_v2/lastwill";
     connect.will_payload.emplace(std::in_place, "This is my last will and testament");
     connect.will_properties.emplace();
@@ -54,8 +57,8 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io) {
         read_packet = co_await p0443_v2::await_sender(connection.control_packet_reader());
         auto *maybe_ack = read_packet.body_as<mqtt5_v2::protocol::puback>();
         if (maybe_ack) {
-            std::cout << "Received ACK(" << (int)maybe_ack->reason_code()
-                      << ") for publish packet " << maybe_ack->packet_identifier() << "\n";
+            std::cout << "Received ACK(" << (int)maybe_ack->reason_code() << ") for publish packet "
+                      << maybe_ack->packet_identifier() << "\n";
         }
         else {
             std::cout << "Did not receive an ACK!\n";
@@ -68,6 +71,7 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io) {
     else {
         std::cout << "Received unexpected packet\n";
     }
+    std::cout << std::endl;
 }
 
 int main() {

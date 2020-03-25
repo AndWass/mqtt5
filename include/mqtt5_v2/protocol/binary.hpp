@@ -81,7 +81,7 @@ struct binary
     void serialize(Writer &&writer) const {
         fixed_int<std::uint16_t> len;
         auto &ref = value();
-        len.value = ref.size();
+        len.value = static_cast<std::uint16_t>(ref.size());
         len.serialize(writer);
         for (auto &b : ref) {
             writer(b);

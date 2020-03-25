@@ -107,6 +107,10 @@ public:
         topic_ = std::move(topic);
     }
 
+    std::string topic() const {
+        return topic_.value();
+    }
+
     std::vector<std::uint8_t>& get_payload_ref() {
         if(data_.index() != 0) {
             data_ = std::vector<std::uint8_t>{};

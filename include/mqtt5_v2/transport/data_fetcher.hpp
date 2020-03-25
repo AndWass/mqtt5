@@ -98,6 +98,7 @@ public:
                     }
                 }
                 catch(std::exception& e) {
+                    (void)e;
                     p0443_v2::set_error((Receiver &&) next_, std::current_exception());
                 }
             }
@@ -124,7 +125,7 @@ public:
     auto get_data(std::uint32_t bytes_requested) {
         return get_data_until([bytes_requested](data_fetcher fetcher) -> std::uint32_t {
             if(fetcher.size() < bytes_requested) {
-                return bytes_requested - fetcher.size();
+                return static_cast<std::uint32_t>(bytes_requested - fetcher.size());
             }
             return 0;
         });
@@ -182,6 +183,7 @@ private:
                     }
                 }
                 catch(std::exception& e) {
+                    (void)e;
                     p0443_v2::set_error((Receiver &&) next_, std::current_exception());
                 }
             }
@@ -235,7 +237,7 @@ public:
     auto get_data(std::uint32_t bytes_requested) {
         return get_data_until([bytes_requested](data_fetcher fetcher) -> std::uint32_t {
             if(fetcher.size() < bytes_requested) {
-                return bytes_requested - fetcher.size();
+                return static_cast<std::uint32_t>(bytes_requested - fetcher.size());
             }
             return 0;
         });
