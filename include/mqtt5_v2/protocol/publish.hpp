@@ -77,11 +77,11 @@ public:
     }
 
     std::uint8_t quality_of_service() const {
-        return (header_flags_ & 0x09) >> 1;
+        return ((header_flags_ >> 1) & 0x03);
     }
 
     void set_retain(bool retain) {
-        header_flags_ = (header_flags_ & 12) + (retain ? 1:0);
+        header_flags_ = (header_flags_ & 14) + (retain ? 1:0);
     }
 
     bool retain_flag() const {
@@ -202,6 +202,16 @@ private:
     std::optional<properties> properties_;
 public:
     static constexpr std::uint8_t type_value = 4;
+
+    static constexpr std::uint8_t success=0,
+        no_matching_subscribers=16,
+        unspecified=128,
+        implementation_specific_error=131,
+        not_authorized=135,
+        topic_name_invalid=144,
+        packet_identifier_in_use=145,
+        quota_exceeded=151,
+        payload_format_invalid=153;
 
     puback() = default;
     puback(std::in_place_t, std::uint32_t remaining_length) {

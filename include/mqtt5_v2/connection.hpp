@@ -61,6 +61,13 @@ public:
             protocol::control_packet{});
     }
 
+    template<class T>
+    auto packet_reader() {
+        return p0443_v2::transform(control_packet_reader(), [](auto&& p) -> std::optional<T> {
+            return std::move(p).body_as<T>();
+        });
+    }
+
     auto control_packet_writer(protocol::control_packet packet) {
         std::vector<std::uint8_t> buffer;
         packet.serialize([&](auto b) {

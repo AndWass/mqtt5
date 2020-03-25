@@ -88,18 +88,36 @@ public:
     control_packet() = default;
 
     template<class T, std::enable_if_t<is_body_type<T>::value>* = nullptr>
-    T* body_as() {
+    T* body_as() & {
         return std::get_if<T>(&body_);
     }
 
     template<class T, std::enable_if_t<is_body_type<T>::value>* = nullptr>
-    const T* body_as() const {
+    const T* body_as() const & {
         return std::get_if<T>(&body_);
+    }
+
+    template<class T, std::enable_if_t<is_body_type<T>::value>* = nullptr>
+    std::optional<T> body_as() && {
+        auto* ptr = std::get_if<T>(&body_);
+        if(ptr) {
+            return std::move(*ptr);
+        }
+        return {};
+    }
+
+    template<class T, std::enable_if_t<is_body_type<T>::value>* = nullptr>
+    std::optional<T> body_as() const && {
+        auto* ptr = std::get_if<T>(&body_);
+        if(ptr) {
+            return std::move(*ptr);
+        }
+        return {};
     }
 
     template<class T, std::enable_if_t<is_body_type<T>::value>* = nullptr>
     bool is_type() const {
-        return body_as<T>() != nullptr;
+        return std::get_if<T>(&body_) != nullptr;
     }
 
     body_storage_type& body() {

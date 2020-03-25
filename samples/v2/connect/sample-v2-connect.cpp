@@ -1,4 +1,4 @@
-#include "mqtt5_v2/protocol/publish.hpp"
+#include <mqtt5_v2/protocol/publish.hpp>
 #include <mqtt5_v2/connection.hpp>
 #include <mqtt5_v2/protocol/control_packet.hpp>
 
@@ -16,17 +16,18 @@ namespace net = boost::asio;
 namespace ip = net::ip;
 using tcp = ip::tcp;
 
+constexpr auto host = "test.mosquitto.org";
+constexpr auto port = "1883";
+
 p0443_v2::immediate_task mqtt_task(net::io_context &io) {
     mqtt5_v2::connection<tcp::socket> connection(io);
 
     {
         tcp::resolver resolver(io);
         auto resolve_result = co_await p0443_v2::await_sender(
-            p0443_v2::asio::resolve(resolver, "test.mosquitto.org", "1883"));
+            p0443_v2::asio::resolve(resolver, host, port));
         auto connected_ep = co_await p0443_v2::await_sender(
             p0443_v2::asio::connect_socket(connection.next_layer(), resolve_result));
-        std::cout << "Connected to " << connected_ep.address().to_string() << ":"
-                  << connected_ep.port() << "\n";
     }
 
     using connect_packet = mqtt5_v2::protocol::connect;
@@ -34,23 +35,25 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io) {
     mqtt5_v2::protocol::connect connect;
     connect.flags = connect_packet::clean_start_flag | connect_packet::will_flag |
                     connect_packet::will_qos_1;
+
     connect.will_topic = "/mqtt5_v2/lastwill";
     connect.will_payload.emplace(std::in_place, "This is my last will and testament");
     connect.will_properties.emplace();
-    std::cout << co_await p0443_v2::await_sender(connection.control_packet_writer(connect))
-              << " bytes written\n";
+
+    co_await p0443_v2::await_sender(connection.control_packet_writer(connect));
 
     auto read_packet = co_await p0443_v2::await_sender(connection.control_packet_reader());
     auto *connack = read_packet.body_as<mqtt5_v2::protocol::connack>();
 
     if (connack && connack->reason_code == 0) {
-        std::cout << "Received successful connack!\n";
+        std::cout << "Successfully connected to " << host << ":" << port << std::endl;
 
         mqtt5_v2::protocol::publish publish;
         publish.set_quality_of_service(1);
         publish.set_packet_identifier(100);
         publish.set_topic("/mqtt5_v2/some_topic");
         publish.set_payload("This is published from mqtt5_v2 using c++ coroutines!");
+
         std::cout << "Published "
                   << co_await p0443_v2::await_sender(connection.control_packet_writer(publish))
                   << " bytes\n";
