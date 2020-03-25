@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include "mqtt5_v2/protocol/fixed_int.hpp"
+#include "mqtt5_v2/protocol/varlen_int.hpp"
 #include <mqtt5_v2/transport/data_fetcher.hpp>
 #include <mqtt5_v2/protocol/header.hpp>
 #include <mqtt5_v2/protocol/string.hpp>
@@ -28,7 +30,7 @@ class publish
 {
 private:
     string topic_;
-    std::optional<string> packet_identifier_;
+    std::optional<fixed_int<std::uint16_t>> packet_identifier_;
     properties properties_;
 
     /**
@@ -86,6 +88,21 @@ public:
         return header_flags_ & 0x01;
     }
 
+    void set_packet_identifier(std::uint16_t id) {
+        packet_identifier_ = id;
+    }
+
+    void set_packet_identifier(std::nullopt_t) {
+        packet_identifier_.reset();
+    }
+
+    std::optional<std::uint16_t> packet_identifier() const {
+        if(packet_identifier_) {
+            return packet_identifier_->value;
+        }
+        return {};
+    }
+
     void set_topic(std::string topic) {
         topic_ = std::move(topic);
     }
@@ -129,7 +146,7 @@ public:
         // fields of the publish packet.
         // The data left in data_ will be the actual payload.
         return p0443_v2::then(protocol::inplace_deserializer(std::get<0>(data_), fetcher), [this](auto fetcher) {
-            auto buffer_fetcher = transport::buffer_data_fetcher<std::vector<std::uint8_t>>(std::get<0>(data_));
+            auto buffer_fetcher = transport::buffer_data_fetcher(std::get<0>(data_));
             if(quality_of_service() > 0) {
                 packet_identifier_.emplace();
             }
@@ -168,6 +185,83 @@ public:
     template <class Writer>
     void serialize(Writer &&writer) const {
         header hdr(type_value, header_flags_, *this);
+        hdr.serialize(writer);
+        serialize_body(writer);
+    }
+};
+
+class puback
+{
+private:
+    fixed_int<std::uint16_t> packet_identifier_;
+    std::optional<fixed_int<std::uint8_t>> reason_code_;
+    std::optional<properties> properties_;
+public:
+    static constexpr std::uint8_t type_value = 4;
+
+    puback() = default;
+    puback(std::in_place_t, std::uint32_t remaining_length) {
+        if(remaining_length > 2) {
+            reason_code_.emplace();
+            properties_.emplace();
+        }
+    }
+
+    std::uint16_t packet_identifier() const {
+        return packet_identifier_.value;
+    }
+
+    void set_packet_identifier(std::uint16_t id) {
+        packet_identifier_ = id;
+    }
+
+    std::uint8_t reason_code() const {
+        return reason_code_.value_or(0);
+    }
+
+    void set_reason_code(std::uint8_t code) {
+        reason_code_ = code;
+    }
+
+    void set_reason_code(std::nullopt_t) {
+        reason_code_.reset();
+    }
+
+    properties properties() const {
+        return properties_.value_or(protocol::properties{});
+    }
+
+    void set_properties(protocol::properties props) {
+        properties_.emplace(std::move(props));
+    }
+
+    template<class Stream>
+    auto inplace_deserializer(transport::data_fetcher<Stream> data) {
+        return p0443_v2::sequence(
+            packet_identifier_.inplace_deserializer(data),
+            protocol::inplace_deserializer(reason_code_, data),
+            protocol::inplace_deserializer(properties_, data)
+        );
+    }
+
+    template <class Writer>
+    void serialize_body(Writer &&writer) const {
+        packet_identifier_.serialize(writer);
+        if(reason_code_) {
+            reason_code_->serialize(writer);
+            if(!properties_) {
+                protocol::properties empty;
+                empty.serialize(writer);
+            }
+            else {
+                properties_->serialize(writer);
+            }
+        }
+    }
+
+    template <class Writer>
+    void serialize(Writer &&writer) const {
+        header hdr(type_value, 0, *this);
         hdr.serialize(writer);
         serialize_body(writer);
     }

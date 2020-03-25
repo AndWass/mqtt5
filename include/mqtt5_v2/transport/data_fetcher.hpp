@@ -254,7 +254,12 @@ public:
 };
 
 template<class BufferType>
-using buffer_data_fetcher = data_fetcher<buffered_data<BufferType>>;
+using buffer_data_fetcher_t = data_fetcher<buffered_data<BufferType>>;
+
+template<class BufferType>
+buffer_data_fetcher_t<BufferType> buffer_data_fetcher(BufferType& buffer) {
+    return buffer_data_fetcher_t<BufferType>(buffer);
+}
 
 } // namespace transport
 } // namespace mqtt5_v2

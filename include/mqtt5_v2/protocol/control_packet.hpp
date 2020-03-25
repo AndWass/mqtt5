@@ -11,6 +11,7 @@
 #include <mqtt5_v2/protocol/connack.hpp>
 #include <mqtt5_v2/protocol/connect.hpp>
 #include <mqtt5_v2/protocol/publish.hpp>
+#include <mqtt5_v2/protocol/subscribe.hpp>
 #include <mqtt5_v2/protocol/header.hpp>
 #include <mqtt5_v2/protocol/inplace_deserializer.hpp>
 
@@ -78,7 +79,7 @@ namespace mqtt5_v2::protocol
 struct control_packet
 {
 private:
-    using body_storage_type = std::variant<connect, connack, publish>;
+    using body_storage_type = std::variant<connect, connack, publish, puback, subscribe>;
     template<class T>
     using is_body_type = std::bool_constant<boost::mp11::mp_find<body_storage_type, T>::value !=
                                boost::mp11::mp_size<body_storage_type>::value>;
@@ -135,6 +136,12 @@ public:
             }
             else if (header_.type() == 3) {
                 body_.template emplace<2>(std::in_place, header_.flags(), header_.remaining_length());
+            }
+            else if (header_.type() == 4) {
+                body_.template emplace<3>(std::in_place, header_.remaining_length());
+            }
+            else if(header_.type() == subscribe::type_value) {
+                body_.template emplace<4>(std::in_place, header_.remaining_length());
             }
 
             return std::visit(

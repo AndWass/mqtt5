@@ -19,6 +19,8 @@
 #include <mqtt5_v2/protocol/header.hpp>
 
 #include <p0443_v2/sequence.hpp>
+#include <p0443_v2/then.hpp>
+#include <p0443_v2/just.hpp>
 
 namespace mqtt5_v2::protocol
 {
@@ -26,7 +28,6 @@ struct connect
 {
     static constexpr std::uint8_t type_value = 1;
 
-    string always_mqtt;
     fixed_int<std::uint8_t> version =  5;
     fixed_int<std::uint8_t> flags = 0x02;
     fixed_int<std::uint16_t> keep_alive = 240;
@@ -40,7 +41,16 @@ struct connect
 
     template <class Stream>
     auto inplace_deserializer(transport::data_fetcher<Stream> data_fetcher) {
-        return p0443_v2::sequence(protocol::inplace_deserializer(always_mqtt, data_fetcher),
+        auto always_mqtt_deserializer = p0443_v2::transform(client_id.inplace_deserializer(data_fetcher), [this](auto fetcher) {
+            if(client_id.value() != "MQTT")
+            {
+                throw std::runtime_error("Unexpected string value");
+            }
+            client_id = "";
+            return fetcher;
+        });
+        
+        return p0443_v2::sequence(std::move(always_mqtt_deserializer),
                                   protocol::inplace_deserializer(version, data_fetcher),
                                   protocol::inplace_deserializer(flags, data_fetcher),
                                   protocol::inplace_deserializer(keep_alive, data_fetcher),
