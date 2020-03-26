@@ -23,9 +23,9 @@ namespace mqtt5_v2
 {
 namespace protocol
 {
-struct string
+struct string: detail::unconstructible
 {
-    template <class SIter, class EIter>
+    /*template <class SIter, class EIter>
     static bool is_valid(SIter begin, EIter end) {
         auto is_in_range = [](std::uint32_t val, std::uint32_t min, std::uint32_t max) {
             return val >= min && val <= max;
@@ -95,72 +95,48 @@ struct string
                         });
                 });
         });
-    }
+    }*/
 
-    nonstd::span<const std::uint8_t> set_from_bytes(nonstd::span<const std::uint8_t> data) {
-        fixed_int<std::uint16_t> length;
-        data = length.set_from_bytes(data);
-        if (data.size() < length.value) {
-            throw protocol_error("not enough bytes to convert to string");
-        }
-        value_ =
-            std::string(reinterpret_cast<const char *>(data.data()), std::size_t(length.value));
-        return data.subspan(length.value);
+    template<class Stream>
+    static std::string deserialize(transport::data_fetcher<Stream> fetcher)
+    {
+        auto string_size = fixed_int<std::uint16_t>::deserialize(fetcher);
+        auto rest_of_data = fetcher.cspan(string_size);
+        std::string retval(reinterpret_cast<const char *>(rest_of_data.data()), string_size);
+        fetcher.consume(string_size);
+        return retval;
     }
 
     template <class Writer>
-    void serialize(Writer &&writer) const {
-        fixed_int<std::uint16_t> len;
-        auto &ref = value();
-        len = ref.size();
-        len.serialize(writer);
-        for (auto &b : ref) {
+    static void serialize(const std::string &data, Writer &&writer) {
+        fixed_int<std::uint16_t>::serialize(static_cast<std::uint16_t>(data.size()), writer);
+        for (auto &b : data) {
             writer(b);
         }
     }
-
-    template <class T, std::enable_if_t<std::is_constructible_v<std::string, T>> * = nullptr>
-    string &operator=(T &&rhs) {
-        value_.emplace<1>(std::forward<T>(rhs));
-        return *this;
-    }
-
-private:
-    std::variant<fixed_int<std::uint16_t>, std::string> value_;
 };
 
 struct key_value_pair
 {
-    const std::string &key() const {
-        return key_.value();
-    }
-    const std::string &value() const {
-        return value_.value();
-    }
-    bool is_valid() const {
-        return key_.is_valid() && value_.is_valid();
-    }
+    struct deserialize_result;
 
-    template <class Stream>
-    auto inplace_deserializer(transport::data_fetcher<Stream> data) {
-        return p0443_v2::sequence(key_.inplace_deserializer(data),
-                                  value_.inplace_deserializer(data));
-    }
-
-    nonstd::span<const std::uint8_t> set_from_bytes(nonstd::span<const std::uint8_t> data) {
-        data = key_.set_from_bytes(data);
-        return value_.set_from_bytes(data);
+    template<class Stream>
+    static key_value_pair deserialize(transport::data_fetcher<Stream> fetcher)
+    {
+        key_value_pair retval;
+        retval.key = string::deserialize(fetcher);
+        retval.value = string::deserialize(fetcher);
+        return retval;
     }
 
     template <class Writer>
-    void serialize(Writer &&writer) const {
-        key_.serialize(writer);
-        value_.serialize(writer);
+    static void serialize(const key_value_pair& data, Writer &&writer) {
+        string::serialize(data.key, writer);
+        string::serialize(data.value, writer);
     }
 
-private:
-    string key_;
-    string value_;
+    std::string key;
+    std::string value;
 };
 } // namespace protocol
 } // namespace mqtt5_v2

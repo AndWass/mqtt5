@@ -19,24 +19,23 @@ struct connack
 {
     static constexpr std::uint8_t type_value = 2;
 
-    fixed_int<std::uint8_t> flags;
-    fixed_int<std::uint8_t> reason_code;
+    std::uint8_t flags;
+    std::uint8_t reason_code;
     protocol::properties properties;
 
     template <class Stream>
-    auto inplace_deserializer(transport::data_fetcher<Stream> data_fetcher) {
-        return p0443_v2::sequence(protocol::inplace_deserializer(flags, data_fetcher),
-                                  protocol::inplace_deserializer(reason_code, data_fetcher),
-                                  protocol::inplace_deserializer(properties, data_fetcher)
-                                  );
+    void deserialize(transport::data_fetcher<Stream> fetcher) {
+        flags = fixed_int<std::uint8_t>::deserialize(fetcher);
+        reason_code = fixed_int<std::uint8_t>::deserialize(fetcher);
+        properties.deserialize(fetcher);
     }
 
 
 
     template <class Writer>
     void serialize_body(Writer &&writer) const {
-        flags.serialize(writer);
-        reason_code.serialize(writer);
+        fixed_int<std::uint8_t>::serialize(flags, writer);
+        fixed_int<std::uint8_t>::serialize(reason_code, writer);
         properties.serialize(writer);
     }
 

@@ -24,70 +24,94 @@ namespace mqtt5_v2::protocol
 {
 struct property
 {
-    using value_storage =
-        std::variant<fixed_int<std::uint8_t>, fixed_int<std::uint16_t>, fixed_int<std::uint32_t>,
-                     varlen_int, string, binary, key_value_pair>;
-
-    template <class Stream>
-    struct value_deserialize_sender
+    struct varlen_value
     {
-        template <template <class...> class Tuple, template <class...> class Variant>
-        using value_types = Variant<Tuple<transport::data_fetcher<Stream>>>;
+        std::uint32_t value;
 
-        template <template <class...> class Variant>
-        using error_types = Variant<std::exception_ptr>;
-
-        static constexpr bool sends_done = false;
-
-        property *prop_;
-        transport::data_fetcher<Stream> data_;
-
-        template <class Receiver>
-        struct operation
-        {
-            template <class V>
-            using v_to_op_transform =
-                p0443_v2::operation_type<decltype(std::declval<V>().inplace_deserializer(
-                                             std::declval<transport::data_fetcher<Stream>>())),
-                                         Receiver>;
-
-            using op_storage_t = boost::mp11::mp_transform<v_to_op_transform, value_storage>;
-
-            property *prop_;
-            Receiver next_;
-            transport::data_fetcher<Stream> data_;
-            std::optional<op_storage_t> next_op_storage_;
-
-            void start() {
-                prop_->activate_id(prop_->identifier.value);
-                std::visit(
-                    [this](auto &value) {
-                        next_op_storage_.emplace(
-                            p0443_v2::connect(value.inplace_deserializer(data_), std::move(next_)));
-                    },
-                    prop_->value);
-                std::visit([](auto &op) { p0443_v2::start(op); }, *next_op_storage_);
-            }
-        };
-        template <class Receiver>
-        auto connect(Receiver &&r) {
-            using recv_t = p0443_v2::remove_cvref_t<Receiver>;
-            return operation<recv_t>{prop_, std::forward<Receiver>(r), data_};
+        varlen_value& operator=(std::uint32_t v) {
+            value = v;
+            return *this;
         }
     };
 
+    template<class Stream>
+    struct deserializer
+    {
+        transport::data_fetcher<Stream> data;
+        void operator()(std::uint8_t& v) {
+            v = fixed_int<std::uint8_t>::deserialize(data);
+        }
+        void operator()(std::uint16_t& v) {
+            v = fixed_int<std::uint16_t>::deserialize(data);
+        }
+        void operator()(std::uint32_t& v) {
+            v = fixed_int<std::uint32_t>::deserialize(data);
+        }
+        void operator()(varlen_value& v) {
+            v.value = varlen_int::deserialize(data);
+        }
+
+        void operator()(std::string& v) {
+            v = string::deserialize(data);
+        }
+
+        void operator()(std::vector<std::uint8_t>& v) {
+            v = binary::deserialize(data);
+        }
+
+        void operator()(key_value_pair& v) {
+            v = key_value_pair::deserialize(data);
+        }
+    };
+
+    template<class Writer>
+    struct serializer
+    {
+        Writer* writer;
+        void operator()(std::uint8_t v) {
+            fixed_int<std::uint8_t>::serialize(v, *writer);
+        }
+        void operator()(std::uint16_t v) {
+            fixed_int<std::uint16_t>::serialize(v, *writer);
+        }
+        void operator()(std::uint32_t v) {
+            fixed_int<std::uint32_t>::serialize(v, *writer);
+        }
+        void operator()(varlen_value v) {
+            varlen_int::serialize(v.value, *writer);
+        }
+
+        void operator()(const std::string& v) {
+            string::serialize(v, *writer);
+        }
+
+        void operator()(const std::vector<std::uint8_t>& v) {
+            binary::serialize(v, *writer);
+        }
+
+        void operator()(const key_value_pair& v) {
+            key_value_pair::serialize(v, *writer);
+        }
+    };
+    using value_storage =
+        std::variant<std::uint8_t, std::uint16_t, std::uint32_t,
+                    varlen_value,
+                     std::string, std::vector<std::uint8_t>, key_value_pair>;
+
     template <class Stream>
-    auto inplace_deserializer(transport::data_fetcher<Stream> data) {
-        return p0443_v2::sequence(identifier.inplace_deserializer(data),
-                                  value_deserialize_sender<Stream>{this, data});
+    static property deserialize(transport::data_fetcher<Stream> data)
+    {
+        property retval;
+        retval.identifier = varlen_int::deserialize(data);
+        retval.activate_id(retval.identifier);
+        std::visit(deserializer<Stream>{data}, retval.value);
+        return retval;
     }
 
     template<class Writer>
-    void serialize(Writer& writer) const {
-        identifier.serialize(writer);
-        std::visit([&](auto& v) {
-            v.serialize(writer);
-        }, value);
+    static void serialize(const property& prop, Writer& writer) {
+        varlen_int::serialize(prop.identifier, writer);
+        std::visit(serializer<Writer>{std::addressof(writer)}, prop.value);
     }
 
     void activate_id(std::uint8_t id) {
@@ -186,18 +210,12 @@ struct property
         set_id_value(id, val);
     }
 
-    varlen_int identifier;
+    varlen_int::type identifier;
     value_storage value;
-
-    nonstd::span<const std::uint8_t> set_from_bytes(nonstd::span<const std::uint8_t> data) {
-        data = identifier.set_from_bytes(data);
-        activate_id(identifier.value);
-        return std::visit([&](auto &val) { return val.set_from_bytes(data); }, value);
-    }
 };
 struct properties
 {
-    template <class Stream>
+    /*template <class Stream>
     auto inplace_deserializer(transport::data_fetcher<Stream> data) {
         auto length_deserializer = properties_length_.inplace_deserializer(data);
         auto storage_resizer_ = p0443_v2::then(std::move(length_deserializer),
@@ -219,54 +237,59 @@ struct properties
         }
         storage_ = std::move(new_properties);
         return data;
+    }*/
+
+    template <class Stream>
+    void deserialize(transport::data_fetcher<Stream> data)
+    {
+        varlen_int::type property_data_length = varlen_int::deserialize(data);
+        auto data_span = data.cspan(property_data_length);
+        while(!data_span.empty()) {
+            properties_.emplace_back(property::deserialize(transport::buffer_data_fetcher(data_span)));
+        }
+        data.consume(property_data_length);
     }
 
     template<class Writer>
     void serialize(Writer& writer) const {
-        varlen_int prop_len;
+        std::uint32_t prop_len = 0;
         auto len_finder = [&](std::uint8_t) {
-            prop_len.value++;
+            prop_len++;
         };
         // Find the length of the contained properties
-        for(auto& p: properties_ref()) {
-            p.serialize(len_finder);
+        for(const auto& p: properties_) {
+            property::serialize(p, len_finder);
         }
 
-        prop_len.serialize(writer);
-        for(auto& p: properties_ref()) {
-            p.serialize(writer);
+        varlen_int::serialize(prop_len, writer);
+        for(const auto& p: properties_) {
+            property::serialize(p, writer);
         }
     }
 
     const std::vector<property>& properties_ref() const {
-        static const std::vector<property> empty;
-        if(storage_.index() == 0) {
-            return empty;
-        }
-        return std::get<1>(storage_);
+        return properties_;
     }
 
     void set_properties(std::vector<property> props) {
-        storage_ = std::move(props);
+        properties_ = std::move(props);
     }
 
     void add_property(property prop) {
-        if(storage_.index() != 1) {
-            storage_.template emplace<1>();
+        if(prop.identifier == 38)
+        {
+            properties_.emplace_back(std::move(prop));
         }
-        if(prop.identifier == 38) {
-            std::get<1>(storage_).emplace_back(std::move(prop));
-        }
-        else {
-            auto &ref = std::get<1>(storage_);
-            auto iter = std::find_if(ref.begin(), ref.end(), [&](auto &p) {
+        else
+        {
+            auto iter = std::find_if(properties_.begin(), properties_.end(), [&](auto &p) {
                 return p.identifier == prop.identifier;
             });
-            if(iter != ref.end()) {
+            if(iter != properties_.end()) {
                 iter->value = std::move(prop.value);
             }
             else {
-                std::get<1>(storage_).emplace_back(std::move(prop));
+                properties_.emplace_back(std::move(prop));
             }
         }
     }
@@ -277,7 +300,6 @@ struct properties
     }
 
 private:
-    varlen_int properties_length_;
-    std::variant<std::vector<std::uint8_t>, std::vector<property>> storage_;
+    std::vector<property> properties_;
 };
 } // namespace mqtt5_v2::protocol

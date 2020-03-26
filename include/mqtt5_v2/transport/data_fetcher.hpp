@@ -34,6 +34,14 @@ public:
     void consume(std::size_t sz) {
         buffer->consume(sz);
     }
+
+    nonstd::span<const std::uint8_t> cspan(std::size_t size_) {
+        if(size() < size_) {
+            throw std::runtime_error("Not enough data");
+        }
+        return cspan().subspan(0, size_);
+    }
+
     nonstd::span<const std::uint8_t> cspan() {
         return {cdata(), ssize()};
     }
@@ -158,55 +166,6 @@ private:
     static_assert(sizeof(value_type) == 1, "sizeof(BufferType::value_type) must be 1");
 
     BufferType *data_;
-
-    template<class Predicate>
-    struct data_reader
-    {
-        template <class Receiver>
-        struct operation
-        {
-            data_fetcher fetcher;
-            Predicate predicate_;
-            Receiver next_;
-    
-            void start() {
-                try {
-                    auto amount_requested = predicate_(fetcher);
-                    if (amount_requested == 0) {
-                        p0443_v2::set_value((Receiver &&) next_, fetcher);
-                    }
-                    else {
-                        // The buffer does not have a source for more data,
-                        // so if the data available in the buffer isn't enough
-                        // then we will simply set an error.
-                        throw std::runtime_error("Attempt to read more data than available in buffer");
-                    }
-                }
-                catch(std::exception& e) {
-                    (void)e;
-                    p0443_v2::set_error((Receiver &&) next_, std::current_exception());
-                }
-            }
-        };
-    
-        template <template <class...> class Tuple, template <class...> class Variant>
-        using value_types = Variant<Tuple<data_fetcher>>;
-    
-        template <template <class...> class Variant>
-        using error_types = Variant<std::exception_ptr>;
-    
-        static constexpr bool sends_done = true;
-    
-        data_fetcher fetcher;
-        Predicate predicate_;
-    
-        template <class Receiver>
-        auto connect(Receiver &&receiver) {
-            return operation<p0443_v2::remove_cvref_t<Receiver>>{fetcher, std::move(predicate_),
-                                                                 std::forward<Receiver>(receiver)};
-        }
-    };
-
 public:
     void consume(std::size_t sz) {
         if(sz >= size()) {
@@ -217,6 +176,14 @@ public:
         }
 
     }
+
+    nonstd::span<const std::uint8_t> cspan(std::size_t size_) {
+        if(size() < size_) {
+            throw std::runtime_error("Not enough data");
+        }
+        return cspan().subspan(0, size_);
+    }
+
     nonstd::span<const std::uint8_t> cspan() const {
         return *data_;
     }
@@ -233,26 +200,46 @@ public:
         return std::ptrdiff_t(size());
     }
 
-    
-    auto get_data(std::uint32_t bytes_requested) {
-        return get_data_until([bytes_requested](data_fetcher fetcher) -> std::uint32_t {
-            if(fetcher.size() < bytes_requested) {
-                return static_cast<std::uint32_t>(bytes_requested - fetcher.size());
-            }
-            return 0;
-        });
-    }
-
-    template<class Predicate, std::enable_if_t<std::is_invocable_v<Predicate, data_fetcher>>* = nullptr>
-    auto get_data_until(Predicate&& pred) {
-        using pred_type = p0443_v2::remove_cvref_t<Predicate>;
-        using result_type = std::invoke_result_t<pred_type, data_fetcher>;
-        static_assert(std::is_integral_v<result_type>, "Predicate must return number of additional bytes to read");
-        return data_reader<pred_type>{*this, std::forward<Predicate>(pred)};
-    }
-
     explicit data_fetcher(BufferType& data): data_(&data) {}
+};
 
+template<>
+class data_fetcher<buffered_data<nonstd::span<const std::uint8_t>>>
+{
+    nonstd::span<const std::uint8_t> *data_;
+public:
+    void consume(std::size_t sz) {
+        if(sz >= size()) {
+            *data_ = nonstd::span<const std::uint8_t>{};
+        }
+        else {
+            *data_ = data_->subspan(sz);
+        }
+    }
+    nonstd::span<const std::uint8_t> cspan(std::size_t size_) {
+        if(size() < size_) {
+            throw std::runtime_error("Not enough data");
+        }
+        return cspan().subspan(0, size_);
+    }
+    
+    nonstd::span<const std::uint8_t> cspan() const {
+        return *data_;
+    }
+
+    const std::uint8_t *cdata() const {
+        return data_->data();
+    }
+
+    std::size_t size() const {
+        return static_cast<std::size_t>(data_->size());
+    }
+
+    std::ptrdiff_t ssize() const {
+        return std::ptrdiff_t(size());
+    }
+
+    explicit data_fetcher(nonstd::span<const std::uint8_t>& data): data_(&data) {}
 };
 
 template<class BufferType>

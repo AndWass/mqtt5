@@ -10,8 +10,8 @@
 
 #include <mqtt5_v2/protocol/connack.hpp>
 #include <mqtt5_v2/protocol/connect.hpp>
-#include <mqtt5_v2/protocol/publish.hpp>
-#include <mqtt5_v2/protocol/subscribe.hpp>
+//#include <mqtt5_v2/protocol/publish.hpp>
+//#include <mqtt5_v2/protocol/subscribe.hpp>
 #include <mqtt5_v2/protocol/header.hpp>
 #include <mqtt5_v2/protocol/inplace_deserializer.hpp>
 
@@ -77,7 +77,7 @@ namespace mqtt5_v2::protocol
 struct control_packet
 {
 private:
-    using body_storage_type = std::variant<connect, connack, publish, puback, subscribe, suback>;
+    using body_storage_type = std::variant<connect, connack/*, publish, puback, subscribe, suback*/>;
     template<class T>
     using is_body_type = std::bool_constant<boost::mp11::mp_find<body_storage_type, T>::value !=
                                boost::mp11::mp_size<body_storage_type>::value>;
@@ -142,6 +142,7 @@ public:
 
     template <class Stream>
     auto inplace_deserializer(transport::data_fetcher<Stream> data_fetcher) {
+        #if 0
         using bound_inplace_deserializer_for =
             boost::mp11::mp_bind_back<inplace_deserializer_for, decltype(data_fetcher)>;
         using return_type = boost::mp11::mp_append<
@@ -156,7 +157,7 @@ public:
             else if (header_.type() == connack::type_value) {
                 body_.template emplace<connack>();
             }
-            else if (header_.type() == publish::type_value) {
+            /*else if (header_.type() == publish::type_value) {
                 body_.template emplace<publish>(std::in_place, header_.flags(), header_.remaining_length());
             }
             else if (header_.type() == puback::type_value) {
@@ -170,7 +171,7 @@ public:
             }
             else {
                 throw std::runtime_error("Received unknown control packet type");
-            }
+            }*/
 
             return std::visit(
                 [this, data_fetcher](auto &p) {
@@ -178,9 +179,43 @@ public:
                 },
                 body_);
         };
+        #endif
 
-        return p0443_v2::then(header_.inplace_deserializer(data_fetcher),
-                              body_deserializer);
+        auto get_parse_body = p0443_v2::lazy([this, data_fetcher]() mutable {
+            return p0443_v2::transform(data_fetcher.get_data(header_.remaining_length()),
+            [this, data_fetcher](auto...) mutable {
+                if (header_.type() == connect::type_value) {
+                body_.template emplace<connect>();
+            }
+            else if (header_.type() == connack::type_value) {
+                body_.template emplace<connack>();
+            }
+            /*else if (header_.type() == publish::type_value) {
+                body_.template emplace<publish>(std::in_place, header_.flags(), header_.remaining_length());
+            }
+            else if (header_.type() == puback::type_value) {
+                body_.template emplace<puback>(std::in_place, header_.remaining_length());
+            }
+            else if(header_.type() == subscribe::type_value) {
+                body_.template emplace<subscribe>(std::in_place, header_.remaining_length());
+            }
+            else if(header_.type() == suback::type_value) {
+                body_.template emplace<suback>(std::in_place, header_.remaining_length());
+            }
+            else {
+                throw std::runtime_error("Received unknown control packet type");
+            }*/
+
+            std::visit(
+                [this, data_fetcher](auto &p) mutable {
+                    p.deserialize(data_fetcher);
+                },
+                body_);
+            });
+        });
+
+        return p0443_v2::sequence(header_.inplace_deserializer(data_fetcher),
+            std::move(get_parse_body));
     }
 
     template <class Writer>

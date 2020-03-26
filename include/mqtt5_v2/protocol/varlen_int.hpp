@@ -6,74 +6,50 @@
 
 #pragma once
 
-#include <cstdint>
-
-#include <mqtt5_v2/protocol/error.hpp>
 #include <mqtt5_v2/transport/data_fetcher.hpp>
+#include <mqtt5_v2/protocol/deserialize.hpp>
+#include <mqtt5_v2/protocol/error.hpp>
+
+#include "detail/unconstructible.hpp"
 
 namespace mqtt5_v2
 {
 namespace protocol
 {
-struct varlen_int
+struct varlen_int: detail::unconstructible
 {
-    std::uint32_t value = 0;
-
-    template<class U, std::enable_if_t<std::is_integral_v<U>>* = nullptr>
-    operator U() const noexcept {
-        return static_cast<U>(value);
-    }
-
-    template<class U, std::enable_if_t<std::is_integral_v<U>>* = nullptr>
-    friend bool operator==(const varlen_int& lhs, const U& rhs) {
-        return lhs.value == rhs;
-    }
-
-    template<class U, std::enable_if_t<std::is_integral_v<U>>* = nullptr>
-    friend bool operator==(const U& lhs, const varlen_int& rhs) {
-        return lhs == rhs.value;
-    }
-
-    friend bool operator==(const varlen_int& lhs, const varlen_int& rhs) {
-        return lhs.value == rhs.value;
-    }
-
-    template<class U, std::enable_if_t<std::is_convertible_v<U, std::uint32_t>>* = nullptr>
-    varlen_int& operator=(U val) {
-        value = static_cast<std::uint32_t>(val);
-        return *this;
-    }
+    using type = std::uint32_t;
 
     static constexpr std::uint32_t max_value() {
         return 268'435'455;
     }
 
-    template <class Stream>
-    auto inplace_deserializer(transport::data_fetcher<Stream> data_fetcher) {
-        return data_fetcher.get_data_until([this](transport::data_fetcher<Stream> fetcher) {
-            if (fetcher.size() == 0) {
-                return 1;
+    static bool can_deserialize(nonstd::span<const std::uint8_t> data) {
+        if(data.size() >= 4) {
+            return true;
+        }
+        for(auto b: data) {
+            if((b & 128) == 0) {
+                return true;
             }
-            auto available_data = fetcher.cspan();
-            std::uint32_t data_used = 0;
-            if (this->try_set_from_data(available_data, data_used)) {
-                fetcher.consume(data_used);
-                return 0;
-            }
-            return 1;
-        });
+        }
+        return false;
     }
 
-    nonstd::span<const std::uint8_t> set_from_bytes(nonstd::span<const std::uint8_t> data) {
-        std::uint32_t data_used = 0;
-        if (!try_set_from_data(data, data_used)) {
-            throw protocol_error("bytes not convertible to varlen_int");
-        }
-        return data.subspan(data_used);
+    template<class Stream>
+    static std::uint32_t deserialize(transport::data_fetcher<Stream> data)
+    {
+        std::uint32_t value;
+        std::uint32_t bytes_used;
+
+        value = deserialize(data, bytes_used);
+        data.consume(bytes_used);
+
+        return value;
     }
 
     template <class Writer>
-    void serialize(Writer&& writer) const {
+    static void serialize(std::uint32_t value, Writer&& writer) {
         if(value > max_value()) {
             throw protocol_error("value exceeding maximum allowed for varlen int");
         }
@@ -89,11 +65,14 @@ struct varlen_int
     }
 
 private:
-    bool try_set_from_data(nonstd::span<const std::uint8_t> data, std::uint32_t &data_used) {
+    template<class Stream>
+    static std::uint32_t deserialize(transport::data_fetcher<Stream> data, std::uint32_t &data_used) {
+        auto data_span = data.cspan();
         std::uint32_t multiplier = 1;
-        value = 0;
-        auto iter = data.begin();
+        std::uint32_t value = 0;
+        auto iter = data_span.begin();
         data_used = 0;
+
         std::uint32_t encoded_byte;
         do {
             encoded_byte = *iter++;
@@ -102,12 +81,12 @@ private:
             if (multiplier > 128 * 128 * 128) {
                 throw protocol_error("data overflow");
             }
-            else if (iter == data.end() && (encoded_byte & 128) != 0) {
-                return false;
+            else if (iter == data_span.end() && (encoded_byte & 128) != 0) {
+                throw std::runtime_error("not enough data");
             }
             multiplier *= 128;
         } while ((encoded_byte & 128) != 0);
-        return true;
+        return value;
     }
 };
 } // namespace protocol

@@ -1,14 +1,24 @@
 
-add_executable(mqtt5-tests
-    main.cpp
-    integer.cpp
-    string.cpp
-    serialize.cpp
-    binary.cpp
-    packet.cpp
-    connect.cpp
-    connack.cpp
-)
+if(MQTT5_ENABLE_LEGACY)
+    add_executable(mqtt5-tests
+        main.cpp
+        integer.cpp
+        string.cpp
+        serialize.cpp
+        binary.cpp
+        packet.cpp
+        connect.cpp
+        connack.cpp
+    )
+    target_link_libraries(mqtt5-tests PRIVATE 
+        CONAN_PKG::doctest
+        mqtt5
+    )
+
+    if(MSVC)
+        target_compile_definitions(mqtt5-tests PRIVATE _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS=1 _WIN32_WINNT=0x0601)
+    endif()
+endif()
 
 add_executable(mqtt5-v2-tests
     main.cpp
@@ -23,16 +33,10 @@ add_executable(mqtt5-v2-tests
     v2/optional_inplace_deserializer.cpp
 )
 
-target_link_libraries(mqtt5-tests PRIVATE 
-    CONAN_PKG::doctest
-    mqtt5
-)
-
 target_link_libraries(mqtt5-v2-tests PRIVATE 
     CONAN_PKG::doctest
     mqtt5
 )
 if(MSVC)
-    target_compile_definitions(mqtt5-tests PRIVATE _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS=1 _WIN32_WINNT=0x0601)
     target_compile_definitions(mqtt5-v2-tests PRIVATE _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS=1 _WIN32_WINNT=0x0601)
 endif()

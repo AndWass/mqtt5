@@ -54,8 +54,8 @@ public:
                 return 
                     p0443_v2::transform(packet.inplace_deserializer(
                         transport::data_fetcher<AsyncStream>(stream_, read_buffer_)),
-                        [&packet](auto) -> protocol::control_packet {
-                            return packet;
+                        [&packet]() -> protocol::control_packet {
+                            return std::move(packet);
                         });
             },
             protocol::control_packet{});

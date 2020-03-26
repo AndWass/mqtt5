@@ -24,6 +24,8 @@
 
 namespace mqtt5_v2::protocol
 {
+using std::begin;
+using std::end;
 struct connect
 {
     static constexpr std::uint8_t type_value = 1;
@@ -33,61 +35,90 @@ struct connect
 
     static constexpr std::uint8_t will_qos_0 = 0, will_qos_1 = 0x08, will_qos_2 = 0x10;
 
-    fixed_int<std::uint8_t> version = 5;
-    fixed_int<std::uint8_t> flags = 0x02;
-    fixed_int<std::uint16_t> keep_alive = 240;
+    std::uint8_t version = 5;
+    std::uint8_t flags = 0x02;
+    std::uint16_t keep_alive = 240;
     properties connect_properties;
-    string client_id;
+    std::string client_id;
     std::optional<properties> will_properties;
-    std::optional<string> will_topic;
-    std::optional<binary> will_payload;
-    std::optional<string> username;
-    std::optional<binary> password;
+    std::optional<std::string> will_topic;
+    std::optional<binary::type> will_payload;
+    std::optional<std::string> username;
+    std::optional<binary::type> password;
+
+    template<class InputIt>
+    void set_will_payload(InputIt begin, InputIt end)
+    {
+        will_payload.emplace(begin, end);
+    }
+
+    template<class T, class = decltype(begin(std::declval<T>())), class = decltype(end(std::declval<T>()))>
+    void set_will_payload(const T& val)
+    {
+        set_will_payload(begin(val), end(val));
+    }
 
     template <class Stream>
-    auto inplace_deserializer(transport::data_fetcher<Stream> data_fetcher) {
-        auto always_mqtt_deserializer =
-            p0443_v2::transform(client_id.inplace_deserializer(data_fetcher), [this](auto fetcher) {
-                if (client_id.value() != "MQTT") {
-                    throw std::runtime_error("Unexpected string value");
-                }
-                client_id = "";
-                return fetcher;
-            });
+    void deserialize(transport::data_fetcher<Stream> fetcher)
+    {
+        std::string always_mqtt = string::deserialize(fetcher);
+        if(always_mqtt != "MQTT")
+        {
+            throw protocol_error("Unexpected MQTT string value");
+        }
+        using int8 = fixed_int<std::uint8_t>;
+        using int16 = fixed_int<std::uint16_t>;
 
-        return p0443_v2::sequence(std::move(always_mqtt_deserializer),
-                                  protocol::inplace_deserializer(version, data_fetcher),
-                                  protocol::inplace_deserializer(flags, data_fetcher),
-                                  protocol::inplace_deserializer(keep_alive, data_fetcher),
-                                  protocol::inplace_deserializer(connect_properties, data_fetcher),
-                                  protocol::inplace_deserializer(client_id, data_fetcher),
-                                  protocol::inplace_deserializer(will_properties, data_fetcher),
-                                  protocol::inplace_deserializer(will_topic, data_fetcher),
-                                  protocol::inplace_deserializer(will_payload, data_fetcher),
-                                  protocol::inplace_deserializer(username, data_fetcher),
-                                  protocol::inplace_deserializer(password, data_fetcher));
+        version = int8::deserialize(fetcher);
+        flags = int8::deserialize(fetcher);
+        keep_alive = int16::deserialize(fetcher);
+        connect_properties.deserialize(fetcher);
+        client_id = string::deserialize(fetcher);
+        if(flags & will_flag)
+        {
+            will_properties.emplace().deserialize(fetcher);
+            will_topic = string::deserialize(fetcher);
+            will_payload = binary::deserialize(fetcher);
+        }
+        if(flags & username_flag)
+        {
+            username = string::deserialize(fetcher);
+        }
+        if(flags & password_flag)
+        {
+            password = binary::deserialize(fetcher);
+        }
     }
 
     template <class Writer>
     void serialize_body(Writer &&writer) const {
-        string always_mqtt("MQTT");
-        always_mqtt.serialize(writer);
-        version.serialize(writer);
-        flags.serialize(writer);
-        keep_alive.serialize(writer);
+        std::string always_mqtt("MQTT");
+        string::serialize(always_mqtt, writer);
+        fixed_int<std::uint8_t>::serialize(version, writer);
+        fixed_int<std::uint8_t>::serialize(flags, writer);
+        fixed_int<std::uint16_t>::serialize(keep_alive, writer);
         connect_properties.serialize(writer);
-        client_id.serialize(writer);
-
-        auto optional_writer = [&](const auto &member) {
-            if (member) {
-                member->serialize(writer);
-            }
-        };
-        optional_writer(will_properties);
-        optional_writer(will_topic);
-        optional_writer(will_payload);
-        optional_writer(username);
-        optional_writer(password);
+        string::serialize(client_id, writer);
+        if(will_properties)
+        {
+            will_properties->serialize(writer);
+        }
+        if(will_topic)
+        {
+            string::serialize(*will_topic, writer);
+        }
+        if(will_payload)
+        {
+            binary::serialize(*will_payload, writer);
+        }
+        if(username)
+        {
+            string::serialize(*username, writer);
+        }
+        if(password)
+        {
+            binary::serialize(*password, writer);
+        }
     }
 
     template <class Writer>
