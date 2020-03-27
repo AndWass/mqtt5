@@ -1,3 +1,6 @@
+#include <boost/program_options/options_description.hpp>
+#include <boost/program_options/parsers.hpp>
+#include <boost/program_options/variables_map.hpp>
 #include <mqtt5_v2/connection.hpp>
 #include <mqtt5_v2/protocol/control_packet.hpp>
 
@@ -7,6 +10,7 @@
 #include <p0443_v2/await_sender.hpp>
 #include <p0443_v2/immediate_task.hpp>
 
+#include <boost/program_options.hpp>
 #include <boost/asio.hpp>
 
 #include <iostream>
@@ -15,16 +19,23 @@ namespace net = boost::asio;
 namespace ip = net::ip;
 using tcp = ip::tcp;
 
-constexpr auto host = "mqtt.eclipse.org";
-constexpr auto port = "1883";
+struct options
+{
+    std::string host;
+    std::string port = "1883";
 
-p0443_v2::immediate_task mqtt_task(net::io_context &io) {
+    bool valid() const {
+        return !host.empty() && !port.empty();
+    }
+};
+
+p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
     mqtt5_v2::connection<tcp::socket> connection(io);
 
     {
         tcp::resolver resolver(io);
         auto resolve_result = co_await p0443_v2::await_sender(
-            p0443_v2::asio::resolve(resolver, host, port));
+            p0443_v2::asio::resolve(resolver, opt.host, opt.port));
         auto connected_ep = co_await p0443_v2::await_sender(
             p0443_v2::asio::connect_socket(connection.next_layer(), resolve_result));
     }
@@ -37,7 +48,6 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io) {
 
     connect.will_topic = "/mqtt5_v2/lastwill";
     connect.set_will_payload("This is my last will and testament");
-    //connect.will_payload.emplace("This is my last will and testament");
     connect.will_properties.emplace();
 
     co_await p0443_v2::await_sender(connection.control_packet_writer(connect));
@@ -46,7 +56,7 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io) {
     auto *connack = read_packet.body_as<mqtt5_v2::protocol::connack>();
 
     if (connack && connack->reason_code == 0) {
-        std::cout << "Successfully connected to " << host << ":" << port << std::endl;
+        std::cout << "Successfully connected to " << opt.host << ":" << opt.port << std::endl;
         mqtt5_v2::protocol::publish publish;
         publish.set_quality_of_service(1);
         publish.packet_identifier = 100;
@@ -76,9 +86,44 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io) {
     std::cout << std::endl;
 }
 
-int main() {
+options parse_options(int argc, char**argv) {
+    namespace po = boost::program_options;
+    po::options_description desc("Options");
+    desc.add_options()("help,h", "Print help")
+    ("host", po::value<std::string>()->default_value("mqtt.eclipse.org"), "Broker hostname")
+    ("port", po::value<std::string>()->default_value("1883"), "Broker port");
+
+    po::variables_map vm;
+    po::store(po::parse_command_line(argc, argv, desc), vm);
+    po::notify(vm);
+
+    if(vm.count("help")) {
+        std::cout << desc << "\n";
+        return {};
+    }
+
+    options retval;
+    if(vm.count("host")) {
+        retval.host = vm["host"].as<std::string>();
+    }
+    if(vm.count("port")) {
+        retval.port = vm["port"].as<std::string>();
+    }
+    if(!retval.valid()) {
+        std::cout << desc << "\n";
+        return {};
+    }
+
+    return retval;
+}
+
+int main(int argc, char** argv) {
+    auto options = parse_options(argc, argv);
+    if(!options.valid()) {
+        return 1;
+    }
     net::io_context io;
-    mqtt_task(io);
+    mqtt_task(io, options);
 
     io.run();
 }

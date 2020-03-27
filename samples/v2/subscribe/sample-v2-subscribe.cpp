@@ -7,6 +7,7 @@
 #include <p0443_v2/await_sender.hpp>
 #include <p0443_v2/immediate_task.hpp>
 
+#include <boost/program_options.hpp>
 #include <boost/asio.hpp>
 
 #include <iostream>
@@ -15,16 +16,24 @@ namespace net = boost::asio;
 namespace ip = net::ip;
 using tcp = ip::tcp;
 
-constexpr auto host = "mqtt.eclipse.org";
-constexpr auto port = "1883";
+struct options
+{
+    std::string host;
+    std::string port;
+    std::vector<std::string> topics;
 
-p0443_v2::immediate_task mqtt_task(net::io_context &io) {
+    bool valid() const {
+        return !host.empty() && !port.empty() && !topics.empty();
+    }
+};
+
+p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
     mqtt5_v2::connection<tcp::socket> connection(io);
 
     {
         tcp::resolver resolver(io);
         auto resolve_result =
-            co_await p0443_v2::await_sender(p0443_v2::asio::resolve(resolver, host, port));
+            co_await p0443_v2::await_sender(p0443_v2::asio::resolve(resolver, opt.host, opt.port));
         auto connected_ep = co_await p0443_v2::await_sender(
             p0443_v2::asio::connect_socket(connection.next_layer(), resolve_result));
     }
@@ -38,18 +47,23 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io) {
                        .body_as<mqtt5_v2::protocol::connack>();
 
     if (connack && connack->reason_code == 0) {
-        std::cout << "Successfully connected to " << host << ":" << port << std::endl;
+        std::cout << "Successfully connected to " << opt.host << ":" << opt.port << std::endl;
         mqtt5_v2::protocol::subscribe subscribe;
         subscribe.packet_identifier = 10;
-        subscribe.topics.emplace_back("/mqtt5_v2/+", 1);
+        for(const auto& topic: opt.topics) {
+            subscribe.topics.emplace_back(topic, 1);
+        }
         co_await p0443_v2::await_sender(connection.control_packet_writer(subscribe));
 
         auto suback =
             co_await p0443_v2::await_sender(connection.packet_reader<mqtt5_v2::protocol::suback>());
 
         if (suback && suback->packet_identifier == 10) {
-            if (!suback->reason_codes.empty() && suback->reason_codes.front() <= 1) {
-                std::cout << "Waiting for published messages on topic '/mqtt5_v2/+'\n";
+            bool valid_codes = std::all_of(suback->reason_codes.begin(), suback->reason_codes.end(), [](auto c) {
+                return c <= 1;
+            });
+            if (!suback->reason_codes.empty() && valid_codes) {
+                std::cout << "Waiting for published messages'\n";
                 while (true) {
                     if (auto publish = co_await p0443_v2::await_sender(
                         connection.packet_reader<mqtt5_v2::protocol::publish>()); publish) {
@@ -87,9 +101,49 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io) {
     }
 }
 
-int main() {
+options parse_options(int argc, char**argv) {
+    namespace po = boost::program_options;
+    po::options_description desc("Options");
+    desc.add_options()("help,h", "Print help")
+    ("host", po::value<std::string>()->default_value("mqtt.eclipse.org"), "Broker hostname")
+    ("port", po::value<std::string>()->default_value("1883"), "Broker port")
+    ("topic", po::value<std::vector<std::string>>(), "Topics to subscribe to");
+
+    po::variables_map vm;
+    po::store(po::parse_command_line(argc, argv, desc), vm);
+    po::notify(vm);
+
+    if(vm.count("help")) {
+        std::cout << desc << "\n";
+        return {};
+    }
+
+    options retval;
+    if(vm.count("host")) {
+        retval.host = vm["host"].as<std::string>();
+    }
+    if(vm.count("port")) {
+        retval.port = vm["port"].as<std::string>();
+    }
+    if(vm.count("topic"))
+    {
+        retval.topics = vm["topic"].as<std::vector<std::string>>();
+    }
+    if(!retval.valid()) {
+        std::cout << desc << "\n";
+        return {};
+    }
+
+    return retval;
+}
+
+int main(int argc, char** argv) {
+    auto options = parse_options(argc, argv);
+    if(!options.valid()) {
+        return 1;
+    }
     net::io_context io;
-    mqtt_task(io);
+    mqtt_task(io, options);
 
     io.run();
 }
