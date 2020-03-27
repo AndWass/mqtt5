@@ -43,7 +43,7 @@ public:
     }
 
     nonstd::span<const std::uint8_t> cspan() {
-        return {cdata(), ssize()};
+        return {cdata(), size()};
     }
 
     const std::uint8_t *cdata() {
@@ -52,10 +52,6 @@ public:
 
     std::size_t size() {
         return buffer->size();
-    }
-
-    std::ptrdiff_t ssize() {
-        return std::ptrdiff_t(size());
     }
 
     bool empty() const {
@@ -200,10 +196,6 @@ public:
         return data_->size();
     }
 
-    std::ptrdiff_t ssize() const {
-        return std::ptrdiff_t(size());
-    }
-
     bool empty() const {
         return data_->empty();
     }
@@ -241,10 +233,6 @@ public:
 
     std::size_t size() const {
         return static_cast<std::size_t>(data_->size());
-    }
-
-    std::ptrdiff_t ssize() const {
-        return std::ptrdiff_t(size());
     }
 
     bool empty() const {

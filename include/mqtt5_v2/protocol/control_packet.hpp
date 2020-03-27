@@ -10,10 +10,12 @@
 
 #include <mqtt5_v2/protocol/connack.hpp>
 #include <mqtt5_v2/protocol/connect.hpp>
+#include <mqtt5_v2/protocol/ping.hpp>
 #include <mqtt5_v2/protocol/header.hpp>
 #include <mqtt5_v2/protocol/inplace_deserializer.hpp>
 #include <mqtt5_v2/protocol/publish.hpp>
 #include <mqtt5_v2/protocol/subscribe.hpp>
+#include <mqtt5_v2/protocol/unsubscribe.hpp>
 
 #include <p0443_v2/just.hpp>
 #include <p0443_v2/then.hpp>
@@ -79,7 +81,7 @@ struct control_packet
 {
 private:
     using body_storage_type =
-        std::variant<connect, connack, publish, puback, subscribe, suback>;
+        std::variant<connect, connack, publish, puback, subscribe, suback, unsubscribe, unsuback, pingreq, pingresp>;
     template <class T>
     using is_body_type = std::bool_constant<boost::mp11::mp_find<body_storage_type, T>::value !=
                                             boost::mp11::mp_size<body_storage_type>::value>;
@@ -168,6 +170,18 @@ public:
                     }
                     else if(header_.type() == suback::type_value) {
                         body_.template emplace<suback>(std::in_place, header_, buffer_fetcher);
+                    }
+                    else if (header_.type() == unsubscribe::type_value) {
+                        body_.template emplace<unsubscribe>(std::in_place, header_, buffer_fetcher);
+                    }
+                    else if(header_.type() == unsuback::type_value) {
+                        body_.template emplace<unsuback>(std::in_place, header_, buffer_fetcher);
+                    }
+                    else if(header_.type() == pingreq::type_value) {
+                        body_.template emplace<pingreq>();
+                    }
+                    else if(header_.type() == pingresp::type_value) {
+                        body_.template emplace<pingresp>();
                     }
                     else {
                         throw std::runtime_error("Received unknown control packet type");
