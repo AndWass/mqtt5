@@ -58,6 +58,10 @@ public:
         return std::ptrdiff_t(size());
     }
 
+    bool empty() const {
+        return size() == 0;
+    }
+
     template<class Predicate>
     struct data_reader
     {
@@ -200,6 +204,10 @@ public:
         return std::ptrdiff_t(size());
     }
 
+    bool empty() const {
+        return data_->empty();
+    }
+
     explicit data_fetcher(BufferType& data): data_(&data) {}
 };
 
@@ -239,11 +247,17 @@ public:
         return std::ptrdiff_t(size());
     }
 
+    bool empty() const {
+        return data_->empty();
+    }
+
     explicit data_fetcher(nonstd::span<const std::uint8_t>& data): data_(&data) {}
 };
 
 template<class BufferType>
 using buffer_data_fetcher_t = data_fetcher<buffered_data<BufferType>>;
+
+using span_byte_data_fetcher_t = buffer_data_fetcher_t<nonstd::span<const std::uint8_t>>;
 
 template<class BufferType>
 buffer_data_fetcher_t<BufferType> buffer_data_fetcher(BufferType& buffer) {

@@ -9,7 +9,7 @@
 TEST_CASE("connect: serialize")
 {
     mqtt5_v2::protocol::connect connect;
-    connect.keep_alive.value = 10;
+    connect.keep_alive = 10;
 
     connect.connect_properties.add_property(17, 10);
 
@@ -45,8 +45,7 @@ TEST_CASE("connect: inplace_deserializer")
         0, 10, 5, 17, 0, 0, 0, 10, 0, 0};
 
     mqtt5_v2::protocol::connect packet;
-    auto op = p0443_v2::connect(packet.inplace_deserializer(mqtt5_v2::transport::buffer_data_fetcher(data)), p0443_v2::sink_receiver{});
-    op.start();
+    packet.deserialize(mqtt5_v2::transport::buffer_data_fetcher(data));
     REQUIRE(data.empty());
-    REQUIRE(packet.keep_alive.value == 10);
+    REQUIRE(packet.keep_alive == 10);
 }

@@ -9,6 +9,7 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/beast/_experimental/test/stream.hpp>
 
+#if 0
 TEST_CASE("empty optional not deserialized")
 {
     std::optional<mqtt5_v2::protocol::fixed_int<std::uint32_t>> fixed_byte;
@@ -52,3 +53,4 @@ TEST_CASE("non-empty optional deserialized")
     REQUIRE(rx_stream.nread_bytes() == 4);
     REQUIRE(fixed_byte->value == 0xa9c29715);
 }
+#endif

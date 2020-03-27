@@ -40,33 +40,33 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io) {
     if (connack && connack->reason_code == 0) {
         std::cout << "Successfully connected to " << host << ":" << port << std::endl;
         mqtt5_v2::protocol::subscribe subscribe;
-        subscribe.set_packet_identifier(10);
-        subscribe.topic_filters().emplace_back("/mqtt5_v2/+", 1);
+        subscribe.packet_identifier = 10;
+        subscribe.topics.emplace_back("/mqtt5_v2/+", 1);
         co_await p0443_v2::await_sender(connection.control_packet_writer(subscribe));
 
         auto suback =
             co_await p0443_v2::await_sender(connection.packet_reader<mqtt5_v2::protocol::suback>());
 
-        if (suback && suback->packet_identifier_ == 10) {
-            if (!suback->reason_codes_.empty() && suback->reason_codes_.front() <= 1) {
+        if (suback && suback->packet_identifier == 10) {
+            if (!suback->reason_codes.empty() && suback->reason_codes.front() <= 1) {
                 std::cout << "Waiting for published messages on topic '/mqtt5_v2/+'\n";
                 while (true) {
                     if (auto publish = co_await p0443_v2::await_sender(
                         connection.packet_reader<mqtt5_v2::protocol::publish>()); publish) {
 
                         std::cout << "Received publish\n";
-                        std::string data(publish->get_payload_ref().begin(),
-                                         publish->get_payload_ref().end());
+                        std::string data(publish->payload.begin(),
+                                         publish->payload.end());
                         std::cout << "  '" << data << "'\n";
-                        std::cout << "  [Topic = " << publish->topic()
+                        std::cout << "  [Topic = " << publish->topic
                                   << ", QoS = " << (int)publish->quality_of_service() << "]\n";
 
                         if (publish->quality_of_service() == 1) {
                             mqtt5_v2::protocol::puback ack;
-                            ack.set_packet_identifier(*publish->packet_identifier());
-                            ack.set_reason_code(0);
+                            ack.packet_identifier = publish->packet_identifier;
+                            ack.reason_code = 0;
 
-                            std::cout << "  [PUBACK Packet identifier = " << ack.packet_identifier()
+                            std::cout << "  [PUBACK Packet identifier = " << ack.packet_identifier
                                       << "]\n";
                             co_await p0443_v2::await_sender(connection.control_packet_writer(ack));
                         }

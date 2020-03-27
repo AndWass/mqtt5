@@ -215,34 +215,11 @@ struct property
 };
 struct properties
 {
-    /*template <class Stream>
-    auto inplace_deserializer(transport::data_fetcher<Stream> data) {
-        auto length_deserializer = properties_length_.inplace_deserializer(data);
-        auto storage_resizer_ = p0443_v2::then(std::move(length_deserializer),
-                                               [this](transport::data_fetcher<Stream> data) {
-                                                   return data.get_data(properties_length_.value);
-                                               });
-        return p0443_v2::transform(std::move(storage_resizer_), [this](auto data) {
-            this->from_bytes(data.cspan().subspan(0, properties_length_.value));
-            data.consume(properties_length_.value);
-            return data;
-        });
-    }
-
-    nonstd::span<const std::uint8_t> from_bytes(nonstd::span<const std::uint8_t> data) {
-        std::vector<property> new_properties;
-        while(!data.empty()) {
-            new_properties.emplace_back();
-            data = new_properties.back().set_from_bytes(data);
-        }
-        storage_ = std::move(new_properties);
-        return data;
-    }*/
-
     template <class Stream>
     void deserialize(transport::data_fetcher<Stream> data)
     {
         varlen_int::type property_data_length = varlen_int::deserialize(data);
+        properties_.clear();
         auto data_span = data.cspan(property_data_length);
         while(!data_span.empty()) {
             properties_.emplace_back(property::deserialize(transport::buffer_data_fetcher(data_span)));
@@ -265,10 +242,6 @@ struct properties
         for(const auto& p: properties_) {
             property::serialize(p, writer);
         }
-    }
-
-    const std::vector<property>& properties_ref() const {
-        return properties_;
     }
 
     void set_properties(std::vector<property> props) {
@@ -297,6 +270,18 @@ struct properties
     template<class T>
     void add_property(std::uint8_t id, const T& value) {
         add_property(property(id, value));
+    }
+
+    void clear() {
+        properties_.clear();
+    }
+
+    std::size_t size() const {
+        return properties_.size();
+    }
+
+    bool empty() const {
+        return properties_.empty();
     }
 
 private:

@@ -14,67 +14,27 @@
 
 TEST_CASE("binary: inplace_deserialize")
 {
-    boost::asio::io_context io;
-    boost::beast::test::stream rx(io);
-    boost::beast::test::stream tx(io);
-    std::uint8_t buffer[9]{
+    std::vector<std::uint8_t> buffer{
         0,5,1,2,3,4,5,6,7
     };
-    rx.connect(tx);
-
-    tx.write_some(boost::asio::buffer(buffer));
-
-    boost::beast::basic_flat_buffer<std::allocator<std::uint8_t>> rx_buffer;
-
-    mqtt5_v2::protocol::binary bin;
-    auto op = p0443_v2::connect(bin.inplace_deserializer(mqtt5_v2::transport::data_fetcher(rx, rx_buffer)), p0443_v2::sink_receiver{});
-    p0443_v2::start(op);
-    io.run();
-    auto val = bin.value();
-    REQUIRE(val.size() == 5);
-    REQUIRE(val[0] == 1);
-    REQUIRE(val[1] == 2);
-    REQUIRE(val[2] == 3);
-    REQUIRE(val[3] == 4);
-    REQUIRE(val[4] == 5);
-    REQUIRE(rx_buffer.size() == 2);
-}
-
-TEST_CASE("binary: inplace_deserialize")
-{
-    boost::asio::io_context io;
-    boost::beast::test::stream rx(io);
-    boost::beast::test::stream tx(io);
-    std::uint8_t buffer[9]{
-        0,5,1,2,3,4,5,6,7
-    };
-    rx.connect(tx);
-
-    tx.write_some(boost::asio::buffer(buffer));
-
-    boost::beast::basic_flat_buffer<std::allocator<std::uint8_t>> rx_buffer;
-
-    mqtt5_v2::protocol::binary bin;
-    auto op = p0443_v2::connect(inplace_deserializer(bin, mqtt5_v2::transport::data_fetcher(rx, rx_buffer)), p0443_v2::sink_receiver{});
-    p0443_v2::start(op);
-    io.run();
-    auto val = bin.value();
-    REQUIRE(val.size() == 5);
-    REQUIRE(val[0] == 1);
-    REQUIRE(val[1] == 2);
-    REQUIRE(val[2] == 3);
-    REQUIRE(val[3] == 4);
-    REQUIRE(val[4] == 5);
-    REQUIRE(rx_buffer.size() == 2);
+    auto bin = mqtt5_v2::protocol::binary::deserialize(mqtt5_v2::transport::buffer_data_fetcher(buffer));
+    REQUIRE(bin.size() == 5);
+    REQUIRE(bin[0] == 1);
+    REQUIRE(bin[1] == 2);
+    REQUIRE(bin[2] == 3);
+    REQUIRE(bin[3] == 4);
+    REQUIRE(bin[4] == 5);
+    REQUIRE(buffer.size() == 2);
 }
 
 TEST_CASE("binary: serialize")
 {
-    mqtt5_v2::protocol::binary bin;
-    std::uint8_t data[5] = {1,2,3,4,5};
-    bin = data;
+    mqtt5_v2::protocol::binary::type bin{1,2,3,4,5};
 
-    auto vec = vector_serialize(bin);
+    std::vector<std::uint8_t> vec;
+    mqtt5_v2::protocol::binary::serialize(bin, [&](auto b) {
+        vec.push_back(b);
+    });
     REQUIRE(vec.size() == 7);
     REQUIRE(vec[0] == 0);
     REQUIRE(vec[1] == 5);

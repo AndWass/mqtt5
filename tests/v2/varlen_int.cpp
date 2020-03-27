@@ -10,56 +10,37 @@
 #include "vector_serialize.hpp"
 
 TEST_CASE("varlen_integer stream read") {
-    boost::asio::io_context io;
-    boost::beast::test::stream tx_stream(io);
-    boost::beast::test::stream rx_stream(io);
-    rx_stream.connect(tx_stream);
     SUBCASE("maximum value") {
-        std::uint8_t data[6]{0xff, 0xff, 0xff, 0x7f, 0x9b, 0x8a};
-        tx_stream.write_some(boost::asio::buffer(data));
+        std::vector<std::uint8_t> data{0xff, 0xff, 0xff, 0x7f, 0x9b, 0x8a};
+        auto buffer = mqtt5_v2::transport::buffer_data_fetcher(data);
+        std::uint32_t value = mqtt5_v2::protocol::varlen_int::deserialize(buffer);
 
-        boost::beast::basic_flat_buffer<std::allocator<std::uint8_t>> buffer;
-
-        mqtt5_v2::protocol::varlen_int value;
-        auto op = p0443_v2::connect(
-            value.inplace_deserializer(mqtt5_v2::transport::data_fetcher(rx_stream, buffer)),
-            p0443_v2::sink_receiver{});
-        p0443_v2::start(op);
-
-        io.run();
-
-        REQUIRE(value.value == 268'435'455);
-        REQUIRE(buffer.size() == 2);
-        auto *ptr = static_cast<const std::uint8_t *>(buffer.cdata().data());
+        REQUIRE(value == 268'435'455);
+        REQUIRE(data.size() == 2);
+        auto *ptr = static_cast<const std::uint8_t *>(buffer.cdata());
         REQUIRE(ptr[0] == 0x9b);
         REQUIRE(ptr[1] == 0x8a);
     }
     SUBCASE("single byte value") {
-        std::uint8_t data[3]{0x7f, 0xa8, 0xb9};
-        tx_stream.write_some(boost::asio::buffer(data));
-
-        boost::beast::basic_flat_buffer<std::allocator<std::uint8_t>> buffer;
-
-        mqtt5_v2::protocol::varlen_int value;
-        auto op = p0443_v2::connect(
-            value.inplace_deserializer(mqtt5_v2::transport::data_fetcher(rx_stream, buffer)),
-            p0443_v2::sink_receiver{});
-        p0443_v2::start(op);
-
-        io.run();
-        REQUIRE(value.value == 0x7f);
+        std::vector<std::uint8_t> data{0x7f, 0xa8, 0xb9};
+        auto buffer = mqtt5_v2::transport::buffer_data_fetcher(data);
+        std::uint32_t value = mqtt5_v2::protocol::varlen_int::deserialize(buffer);
+        REQUIRE(value == 0x7f);
         REQUIRE(buffer.size() == 2);
-        auto *ptr = static_cast<const std::uint8_t *>(buffer.cdata().data());
+        auto *ptr = static_cast<const std::uint8_t *>(buffer.cdata());
         REQUIRE(ptr[0] == 0xa8);
         REQUIRE(ptr[1] == 0xb9);
     }
 }
 
 TEST_CASE("varlen_int: serialize") {
-    mqtt5_v2::protocol::varlen_int value;
+    std::uint32_t value;
     SUBCASE("maximum value") {
-        value.value = 268'435'455;
-        auto vector = vector_serialize(value);
+        value = 268'435'455;
+        std::vector<std::uint8_t> vector;
+        mqtt5_v2::protocol::varlen_int::serialize(value, [&](auto b) {
+            vector.push_back(b);
+        });
         REQUIRE(vector.size() == 4);
         REQUIRE(vector[0] == 0xff);
         REQUIRE(vector[1] == 0xff);
@@ -68,14 +49,20 @@ TEST_CASE("varlen_int: serialize") {
     }
 
     SUBCASE("single value") {
-        value.value = 125;
-        auto vector = vector_serialize(value);
+        value = 125;
+        std::vector<std::uint8_t> vector;
+        mqtt5_v2::protocol::varlen_int::serialize(value, [&](auto b) {
+            vector.push_back(b);
+        });
         REQUIRE(vector.size() == 1);
         REQUIRE(vector[0] == 125);
     }
 
     SUBCASE("error on too big value") {
-        value.value = 268'435'455+1;
-        REQUIRE_THROWS_AS(vector_serialize(value), mqtt5_v2::protocol::protocol_error);
+        value = 268'435'455+1;
+        std::vector<std::uint8_t> vector;
+        REQUIRE_THROWS_AS(
+        mqtt5_v2::protocol::varlen_int::serialize(value, [&](auto b) {
+        }), mqtt5_v2::protocol::protocol_error);
     }
 }

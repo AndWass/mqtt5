@@ -1,4 +1,3 @@
-//#include <mqtt5_v2/protocol/publish.hpp>
 #include <mqtt5_v2/connection.hpp>
 #include <mqtt5_v2/protocol/control_packet.hpp>
 
@@ -48,6 +47,24 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io) {
 
     if (connack && connack->reason_code == 0) {
         std::cout << "Successfully connected to " << host << ":" << port << std::endl;
+        mqtt5_v2::protocol::publish publish;
+        publish.set_quality_of_service(1);
+        publish.packet_identifier = 100;
+        publish.topic = "/mqtt5_v2/some_topic";
+        publish.set_payload("This is published from mqtt5_v2 using c++ coroutines!");
+
+        std::cout << "Published "
+                  << co_await p0443_v2::await_sender(connection.control_packet_writer(publish))
+                  << " bytes\n";
+        read_packet = co_await p0443_v2::await_sender(connection.control_packet_reader());
+        auto *maybe_ack = read_packet.body_as<mqtt5_v2::protocol::puback>();
+        if (maybe_ack) {
+            std::cout << "Received ACK(" << (int)maybe_ack->reason_code << ") for publish packet "
+                      << maybe_ack->packet_identifier << "\n";
+        }
+        else {
+            std::cout << "Did not receive an ACK!\n";
+        }
     }
     else if (connack) {
         std::cout << "Received unsuccessful connack, reason code = " << (int)connack->reason_code

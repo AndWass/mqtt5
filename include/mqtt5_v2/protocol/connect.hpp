@@ -46,6 +46,12 @@ struct connect
     std::optional<std::string> username;
     std::optional<binary::type> password;
 
+    connect() = default;
+    template<class T>
+    connect(std::in_place_t, T fetcher) {
+        deserialize(fetcher);
+    }
+
     template<class InputIt>
     void set_will_payload(InputIt begin, InputIt end)
     {

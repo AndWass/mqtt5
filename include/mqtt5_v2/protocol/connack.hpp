@@ -23,6 +23,12 @@ struct connack
     std::uint8_t reason_code;
     protocol::properties properties;
 
+    connack() = default;
+    template<class T>
+    connack(std::in_place_t, T fetcher) {
+        deserialize(fetcher);
+    }
+
     template <class Stream>
     void deserialize(transport::data_fetcher<Stream> fetcher) {
         flags = fixed_int<std::uint8_t>::deserialize(fetcher);

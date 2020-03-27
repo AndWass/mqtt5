@@ -109,5 +109,6 @@
         "csetjmp": "cpp",
         "valarray": "cpp"
     },
-    "C_Cpp.intelliSenseCacheSize": 0
+    "C_Cpp.intelliSenseCacheSize": 0,
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json"
 }

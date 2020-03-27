@@ -13,7 +13,7 @@ namespace mqtt5_v2::protocol
 {
 struct adl_tag {};
 
-nonstd::span<const std::uint8_t> take_data(nonstd::span<const std::uint8_t> data, std::size_t size) {
+inline nonstd::span<const std::uint8_t> take_data(nonstd::span<const std::uint8_t> data, std::size_t size) {
     if(static_cast<std::size_t>(data.size()) < size) {
         throw std::runtime_error("Not enough data");
     }
