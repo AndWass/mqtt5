@@ -174,12 +174,6 @@ public:
                     }
 
                     data_fetcher.consume(header_.remaining_length());
-
-                    /*std::visit(
-                        [this, data_fetcher](auto &p) mutable {
-                            p.deserialize(data_fetcher);
-                        },
-                        body_);*/
                 });
         });
 

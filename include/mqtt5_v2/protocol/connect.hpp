@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cstdint>
 #include <optional>
+#include <iterator>
 
 #include <mqtt5_v2/protocol/binary.hpp>
 #include <mqtt5_v2/protocol/fixed_int.hpp>
@@ -58,7 +59,7 @@ struct connect
         will_payload.emplace(begin, end);
     }
 
-    template<class T, class = decltype(begin(std::declval<T>())), class = decltype(end(std::declval<T>()))>
+    template<class T, class = decltype(begin(std::declval<const T&>()))>
     void set_will_payload(const T& val)
     {
         set_will_payload(begin(val), end(val));

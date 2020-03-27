@@ -15,6 +15,7 @@
 
 #include <optional>
 #include <variant>
+#include <iterator>
 
 namespace mqtt5_v2::protocol
 {
@@ -38,7 +39,7 @@ public:
         std::copy(begin, end, std::back_inserter(payload));
     }
 
-    template<class T, class = decltype(begin(std::declval<T>()))>
+    template<class T, class = decltype(begin(std::declval<const T&>()))>
     void set_payload(const T& t) {
         set_payload(begin(t), end(t));
     }

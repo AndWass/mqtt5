@@ -15,7 +15,7 @@ namespace net = boost::asio;
 namespace ip = net::ip;
 using tcp = ip::tcp;
 
-constexpr auto host = "test.mosquitto.org";
+constexpr auto host = "mqtt.eclipse.org";
 constexpr auto port = "1883";
 
 p0443_v2::immediate_task mqtt_task(net::io_context &io) {
