@@ -17,7 +17,7 @@
             "request": "launch",
             "name": "Launch (lldb)",
             "program": "${command:cmake.launchTargetPath}",
-            "args": [],
+            "args": ["--topic", "mqtt5_v2/hello", "--message", "\"Hello world\""],
             "cwd": "${workspaceFolder}"
         },
         {

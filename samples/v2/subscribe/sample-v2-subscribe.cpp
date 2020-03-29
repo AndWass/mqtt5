@@ -30,13 +30,10 @@ struct options
 p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
     mqtt5_v2::connection<tcp::socket> connection(io);
 
-    {
-        tcp::resolver resolver(io);
-        auto resolve_result =
-            co_await p0443_v2::await_sender(p0443_v2::asio::resolve(resolver, opt.host, opt.port));
-        auto connected_ep = co_await p0443_v2::await_sender(
-            p0443_v2::asio::connect_socket(connection.next_layer(), resolve_result));
-    }
+    auto resolve_result =
+        co_await p0443_v2::await_sender(p0443_v2::asio::resolve(io, opt.host, opt.port));
+    auto connected_ep = co_await p0443_v2::await_sender(
+        p0443_v2::asio::connect_socket(connection.next_layer(), resolve_result));
 
     using connect_packet = mqtt5_v2::protocol::connect;
 
