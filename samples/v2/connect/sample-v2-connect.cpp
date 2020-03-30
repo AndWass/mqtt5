@@ -54,9 +54,10 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
 
     if (connack && connack->reason_code == 0) {
         std::cout << "Successfully connected to " << opt.host << ":" << opt.port << std::endl;
+        std::cout << "Assigned client id = " << connack->properties.assigned_client_id << std::endl;
         mqtt5_v2::protocol::publish publish;
         publish.set_quality_of_service(1);
-        publish.packet_identifier = 100;
+        publish.packet_identifier = 1;
         publish.topic = "/mqtt5_v2/some_topic";
         publish.set_payload("This is published from mqtt5_v2 using c++ coroutines!");
 

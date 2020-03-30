@@ -20,41 +20,9 @@ namespace mqtt5_v2::protocol
 {
 struct connack
 {
-    static constexpr std::uint8_t type_value = 2;
-
-    std::uint8_t flags;
-    std::uint8_t reason_code;
-    protocol::properties properties;
-
-    connack() = default;
-    template <class T>
-    connack(std::in_place_t, T fetcher) {
-        deserialize(fetcher);
-    }
-
-    template <class Stream>
-    void deserialize(transport::data_fetcher<Stream> fetcher) {
-        flags = fixed_int<std::uint8_t>::deserialize(fetcher);
-        reason_code = fixed_int<std::uint8_t>::deserialize(fetcher);
-        properties.deserialize(fetcher);
-    }
-
-    template <class Writer>
-    void serialize_body(Writer &&writer) const {
-        fixed_int<std::uint8_t>::serialize(flags, writer);
-        fixed_int<std::uint8_t>::serialize(reason_code, writer);
-        properties.serialize(writer);
-    }
-
-    template <class Writer>
-    void serialize(Writer &&writer) const {
-        header hdr(type_value, 0, *this);
-        hdr.serialize(writer);
-        serialize_body(writer);
-    }
-
     struct properties_t
     {
+        std::vector<property> unknown_properties;
         std::vector<key_value_pair> user_properties;
         std::string authentication_method;
         std::vector<std::uint8_t> authentication_data;
@@ -75,7 +43,10 @@ struct connack
         bool subscription_identifiers_available = true;
         bool shared_subscription_available = true;
 
-        static properties_t from_properties(const protocol::properties &props) {
+        template<class Stream>
+        static properties_t deserialize(transport::data_fetcher<Stream> data) {
+            protocol::properties props;
+            props.deserialize(data);
             properties_t retval;
             using ids = property_ids;
 
@@ -133,11 +104,15 @@ struct connack
                 else if (prop.identifier == ids::server_reference) {
                     retval.server_reference = std::get<std::string>(prop.value);
                 }
+                else {
+                    retval.unknown_properties.push_back(prop);
+                }
             }
             return retval;
         }
 
-        protocol::properties to_properties() const {
+        template<class Writer>
+        void serialize(Writer&& writer) const {
             protocol::properties retval;
             properties_t dflt;
             using ids = property_ids;
@@ -176,8 +151,46 @@ struct connack
             maybe_add(response_information, dflt.response_information, ids::response_information);
             maybe_add(server_reference, dflt.server_reference, ids::server_reference);
 
-            return retval;
+            for(auto &p: unknown_properties)
+            {
+                retval.add_property(p);
+            }
+
+            retval.serialize(writer);
         }
     };
+
+    static constexpr std::uint8_t type_value = 2;
+
+    std::uint8_t flags;
+    std::uint8_t reason_code;
+    properties_t properties;
+
+    connack() = default;
+    template <class T>
+    connack(std::in_place_t, T fetcher) {
+        deserialize(fetcher);
+    }
+
+    template <class Stream>
+    void deserialize(transport::data_fetcher<Stream> fetcher) {
+        flags = fixed_int<std::uint8_t>::deserialize(fetcher);
+        reason_code = fixed_int<std::uint8_t>::deserialize(fetcher);
+        properties = properties_t::deserialize(fetcher);
+    }
+
+    template <class Writer>
+    void serialize_body(Writer &&writer) const {
+        fixed_int<std::uint8_t>::serialize(flags, writer);
+        fixed_int<std::uint8_t>::serialize(reason_code, writer);
+        properties.serialize(writer);
+    }
+
+    template <class Writer>
+    void serialize(Writer &&writer) const {
+        header hdr(type_value, 0, *this);
+        hdr.serialize(writer);
+        serialize_body(writer);
+    }
 };
 } // namespace mqtt5_v2::protocol

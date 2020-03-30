@@ -39,6 +39,7 @@ struct connect
 
     struct properties_t
     {
+        std::vector<property> unknown_properties;
         std::vector<key_value_pair> user_properties;
         std::string authentication_method;
         std::vector<std::uint8_t> authentication_data;
@@ -50,7 +51,10 @@ struct connect
         bool request_response_information = false;
         bool request_problem_information = false;
 
-        static properties_t from_properties(const protocol::properties &props) {
+        template<class Stream>
+        static properties_t deserialize(transport::data_fetcher<Stream> data) {
+            protocol::properties props;
+            props.deserialize(data);
             properties_t retval;
             for (const auto &prop : props) {
                 if (prop.identifier == property_ids::session_expiry_interval) {
@@ -81,11 +85,16 @@ struct connect
                 else if (prop.identifier == property_ids::authentication_data) {
                     retval.authentication_data = std::get<std::vector<std::uint8_t>>(prop.value);
                 }
+                else {
+                    retval.unknown_properties.push_back(prop);
+                }
             }
             return retval;
         }
 
-        protocol::properties to_properties() const {
+        template<class Writer>
+        void serialize(Writer&& writer) const
+        {
             protocol::properties retval;
             properties_t dflt;
             for (auto &kv : user_properties) {
@@ -111,14 +120,17 @@ struct connect
             maybe_add(request_problem_information, dflt.request_problem_information,
                       ids::request_problem_information);
 
-            return retval;
+            for(auto &p: unknown_properties) {
+                retval.add_property(p);
+            }
+            retval.serialize(writer);
         }
     };
 
     std::uint8_t version = 5;
     std::uint8_t flags = 0x02;
     std::chrono::duration<std::uint16_t> keep_alive{240};
-    properties connect_properties;
+    properties_t connect_properties;
     std::string client_id;
     std::optional<properties> will_properties;
     std::optional<std::string> will_topic;
@@ -154,7 +166,7 @@ struct connect
         version = int8::deserialize(fetcher);
         flags = int8::deserialize(fetcher);
         keep_alive = decltype(keep_alive){int16::deserialize(fetcher)};
-        connect_properties.deserialize(fetcher);
+        connect_properties = properties_t::deserialize(fetcher);
         client_id = string::deserialize(fetcher);
         if (flags & will_flag) {
             will_properties.emplace().deserialize(fetcher);

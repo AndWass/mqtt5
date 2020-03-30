@@ -201,13 +201,8 @@ struct property
                                                                             T>::template fn>::value,
             "T cannot be used to assign to any potential property value");
         std::visit(
-            [&](auto &elem) {
-                if constexpr (std::is_assignable_v<decltype(elem), T>) {
-                    elem = val;
-                }
-                else {
-                    throw std::runtime_error("Mismatched attempt to set property types");
-                }
+            [&, this](auto &elem) {
+                this->assign_value(elem, val);
             },
             value);
     }
@@ -221,6 +216,52 @@ struct property
 
     varlen_int::type identifier;
     value_storage value;
+
+private:
+#define ENABLE_IF(...) std::enable_if_t<__VA_ARGS__>* = nullptr
+    template<class T, ENABLE_IF(std::is_integral_v<T>)>
+    void assign_value(varlen_value& elem, T val)
+    {
+        elem.value = static_cast<std::uint32_t>(val);
+    }
+
+    template<class U, class V, ENABLE_IF(std::is_integral_v<U> && std::is_integral_v<V>)>
+    void assign_value(U& elem, V val)
+    {
+        elem = static_cast<U>(val);
+    }
+
+    template<class T, ENABLE_IF(std::is_assignable_v<std::string&, const T&> && !std::is_integral_v<T>)>
+    void assign_value(std::string& elem, const T& val)
+    {
+        elem = val;
+    }
+
+    void assign_value(std::vector<std::uint8_t>& elem, const std::vector<std::uint8_t>& val) {
+        elem = val;
+    }
+
+    void assign_value(key_value_pair& elem, const key_value_pair& val) {
+        elem = val;
+    }
+
+    template<class U, class V>
+    struct mismatched_value_types
+    {
+        static constexpr bool value = !(
+            (std::is_same_v<U, varlen_value> && std::is_integral_v<V>) ||
+            (std::is_integral_v<U> && std::is_integral_v<V>) ||
+            (std::is_same_v<U, std::string> && std::is_assignable_v<U&, const V&> && !std::is_integral_v<V>) ||
+            (std::is_same_v<U, V>)
+        );
+    };
+
+    template<class U, class V, ENABLE_IF(mismatched_value_types<U, V>::value)>
+    void assign_value(U&, const V&) {
+        throw std::runtime_error("Mismatched attempt to set property types");
+    }
+
+#undef ENABLE_IF
 };
 struct properties
 {

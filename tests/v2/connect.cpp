@@ -11,7 +11,7 @@ TEST_CASE("connect: serialize")
     mqtt5_v2::protocol::connect connect;
     connect.keep_alive = std::chrono::seconds(10);
 
-    connect.connect_properties.add_property(17, 10);
+    connect.connect_properties.session_expiry_interval = std::chrono::seconds(10);
 
     auto bytes = vector_serialize(connect);
     auto byte_len = bytes.size();
@@ -46,10 +46,8 @@ TEST_CASE("connect: deserialize")
 
     mqtt5_v2::protocol::connect packet;
     packet.deserialize(mqtt5_v2::transport::buffer_data_fetcher(data));
-    mqtt5_v2::protocol::connect::properties_t props;
-    props = props.from_properties(packet.connect_properties);
 
     REQUIRE(data.empty());
     REQUIRE(packet.keep_alive.count() == 10);
-    REQUIRE(props.session_expiry_interval.count() == 10);
+    REQUIRE(packet.connect_properties.session_expiry_interval.count() == 10);
 }
