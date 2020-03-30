@@ -53,56 +53,56 @@ struct connack
             for (const auto &prop : props) {
                 if (prop.identifier == ids::session_expiry_interval) {
                     retval.session_expiry_interval =
-                        std::chrono::seconds{std::get<std::uint32_t>(prop.value)};
+                        std::chrono::seconds{prop.value_as<std::uint32_t>()};
                 }
                 else if (prop.identifier == ids::receive_maximum) {
-                    retval.receive_maximum = std::get<std::uint16_t>(prop.value);
+                    retval.receive_maximum = prop.value_as<std::uint16_t>();
                 }
                 else if (prop.identifier == ids::maximum_qos) {
-                    retval.maximum_qos = std::get<std::uint8_t>(prop.value);
+                    retval.maximum_qos = prop.value_as<std::uint8_t>();
                 }
                 else if (prop.identifier == ids::maximum_packet_size) {
-                    retval.maximum_packet_size = std::get<std::uint32_t>(prop.value);
+                    retval.maximum_packet_size = prop.value_as<std::uint32_t>();
                 }
                 else if (prop.identifier == ids::topic_alias_maximum) {
-                    retval.topic_alias_maximum = std::get<std::uint16_t>(prop.value);
+                    retval.topic_alias_maximum = prop.value_as<std::uint16_t>();
                 }
                 else if (prop.identifier == ids::retain_available) {
-                    retval.retain_available = std::get<std::uint8_t>(prop.value);
+                    retval.retain_available = prop.value_as<std::uint8_t>();
                 }
                 else if (prop.identifier == ids::user_property) {
-                    retval.user_properties.emplace_back(std::get<key_value_pair>(prop.value));
+                    retval.user_properties.emplace_back(prop.value_as<key_value_pair>());
                 }
                 else if (prop.identifier == ids::authentication_method) {
-                    retval.authentication_method = std::get<std::string>(prop.value);
+                    retval.authentication_method = prop.value_as<std::string>();
                 }
                 else if (prop.identifier == ids::authentication_data) {
-                    retval.authentication_data = std::get<std::vector<std::uint8_t>>(prop.value);
+                    retval.authentication_data = prop.value_as<std::vector<std::uint8_t>>();
                 }
                 else if (prop.identifier == ids::assigned_client_id) {
-                    retval.assigned_client_id = std::get<std::string>(prop.value);
+                    retval.assigned_client_id = prop.value_as<std::string>();
                 }
                 else if (prop.identifier == ids::reason_string) {
-                    retval.reason_string = std::get<std::string>(prop.value);
+                    retval.reason_string = prop.value_as<std::string>();
                 }
                 else if (prop.identifier == ids::wildcard_subscriptions_available) {
-                    retval.wildcard_subscriptions_available = std::get<std::uint8_t>(prop.value);
+                    retval.wildcard_subscriptions_available = prop.value_as<std::uint8_t>();
                 }
                 else if (prop.identifier == ids::wildcard_subscriptions_available) {
-                    retval.subscription_identifiers_available = std::get<std::uint8_t>(prop.value);
+                    retval.subscription_identifiers_available = prop.value_as<std::uint8_t>();
                 }
                 else if (prop.identifier == ids::shared_subscription_available) {
-                    retval.shared_subscription_available = std::get<std::uint8_t>(prop.value);
+                    retval.shared_subscription_available = prop.value_as<std::uint8_t>();
                 }
                 else if (prop.identifier == ids::server_keep_alive) {
                     retval.server_keep_alive =
-                        std::chrono::seconds{std::get<std::uint16_t>(prop.value)};
+                        std::chrono::seconds{prop.value_as<std::uint16_t>()};
                 }
                 else if (prop.identifier == ids::response_information) {
-                    retval.response_information = std::get<std::string>(prop.value);
+                    retval.response_information = prop.value_as<std::string>();
                 }
                 else if (prop.identifier == ids::server_reference) {
-                    retval.server_reference = std::get<std::string>(prop.value);
+                    retval.server_reference = prop.value_as<std::string>();
                 }
                 else {
                     retval.unknown_properties.push_back(prop);

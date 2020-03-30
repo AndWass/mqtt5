@@ -7,8 +7,8 @@
 #include <p0443_v2/await_sender.hpp>
 #include <p0443_v2/immediate_task.hpp>
 
-#include <boost/program_options.hpp>
 #include <boost/asio.hpp>
+#include <boost/program_options.hpp>
 
 #include <iostream>
 
@@ -45,9 +45,11 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
 
     if (connack && connack->reason_code == 0) {
         std::cout << "Successfully connected to " << opt.host << ":" << opt.port << std::endl;
+        std::cout << "Assigned client identifier = " << connack->properties.assigned_client_id
+                  << "\n";
         mqtt5_v2::protocol::subscribe subscribe;
         subscribe.packet_identifier = 10;
-        for(const auto& topic: opt.topics) {
+        for (const auto &topic : opt.topics) {
             subscribe.topics.emplace_back(topic, 1);
         }
         co_await p0443_v2::await_sender(connection.control_packet_writer(subscribe));
@@ -56,18 +58,17 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
             co_await p0443_v2::await_sender(connection.packet_reader<mqtt5_v2::protocol::suback>());
 
         if (suback && suback->packet_identifier == 10) {
-            bool valid_codes = std::all_of(suback->reason_codes.begin(), suback->reason_codes.end(), [](auto c) {
-                return c <= 1;
-            });
+            bool valid_codes = std::all_of(suback->reason_codes.begin(), suback->reason_codes.end(),
+                                           [](auto c) { return c <= 1; });
             if (!suback->reason_codes.empty() && valid_codes) {
                 std::cout << "Waiting for published messages'\n";
                 while (true) {
                     if (auto publish = co_await p0443_v2::await_sender(
-                        connection.packet_reader<mqtt5_v2::protocol::publish>()); publish) {
+                            connection.packet_reader<mqtt5_v2::protocol::publish>());
+                        publish) {
 
                         std::cout << "Received publish\n";
-                        std::string data(publish->payload.begin(),
-                                         publish->payload.end());
+                        std::string data(publish->payload.begin(), publish->payload.end());
                         std::cout << "  '" << data << "'\n";
                         std::cout << "  [Topic = " << publish->topic
                                   << ", QoS = " << (int)publish->quality_of_service() << "]\n";
@@ -98,35 +99,34 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
     }
 }
 
-options parse_options(int argc, char**argv) {
+options parse_options(int argc, char **argv) {
     namespace po = boost::program_options;
     po::options_description desc("Options");
-    desc.add_options()("help,h", "Print help")
-    ("host", po::value<std::string>()->default_value("mqtt.eclipse.org"), "Broker hostname")
-    ("port", po::value<std::string>()->default_value("1883"), "Broker port")
-    ("topic", po::value<std::vector<std::string>>(), "Topics to subscribe to");
+    desc.add_options()("help,h", "Print help")(
+        "host", po::value<std::string>()->default_value("mqtt.eclipse.org"),
+        "Broker hostname")("port", po::value<std::string>()->default_value("1883"), "Broker port")(
+        "topic", po::value<std::vector<std::string>>(), "Topics to subscribe to");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
     po::notify(vm);
 
-    if(vm.count("help")) {
+    if (vm.count("help")) {
         std::cout << desc << "\n";
         return {};
     }
 
     options retval;
-    if(vm.count("host")) {
+    if (vm.count("host")) {
         retval.host = vm["host"].as<std::string>();
     }
-    if(vm.count("port")) {
+    if (vm.count("port")) {
         retval.port = vm["port"].as<std::string>();
     }
-    if(vm.count("topic"))
-    {
+    if (vm.count("topic")) {
         retval.topics = vm["topic"].as<std::vector<std::string>>();
     }
-    if(!retval.valid()) {
+    if (!retval.valid()) {
         std::cout << desc << "\n";
         return {};
     }
@@ -134,9 +134,9 @@ options parse_options(int argc, char**argv) {
     return retval;
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
     auto options = parse_options(argc, argv);
-    if(!options.valid()) {
+    if (!options.valid()) {
         return 1;
     }
     net::io_context io;

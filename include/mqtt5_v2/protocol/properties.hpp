@@ -24,14 +24,17 @@ namespace mqtt5_v2::protocol
 {
 struct property_ids
 {
-    static constexpr std::uint8_t session_expiry_interval = 17, assigned_client_id = 18,
-                                  server_keep_alive = 19, authentication_method = 21,
-                                  authentication_data = 22, request_problem_information = 23,
+    static constexpr std::uint8_t payload_format_indicator = 1, message_expiry_interval = 2,
+                                  content_type = 3, response_topic = 8, correlation_data = 9,
+                                  subscription_identifier = 11, session_expiry_interval = 17,
+                                  assigned_client_id = 18, server_keep_alive = 19,
+                                  authentication_method = 21, authentication_data = 22,
+                                  request_problem_information = 23,
                                   request_response_information = 25, response_information = 26,
                                   server_reference = 28, reason_string = 31, receive_maximum = 33,
-                                  topic_alias_maximum = 34, maximum_qos = 36, retain_available = 37,
-                                  user_property = 38, maximum_packet_size = 39,
-                                  wildcard_subscriptions_available = 40,
+                                  topic_alias_maximum = 34, topic_alias = 35, maximum_qos = 36,
+                                  retain_available = 37, user_property = 38,
+                                  maximum_packet_size = 39, wildcard_subscriptions_available = 40,
                                   subscription_identifiers_available = 41,
                                   shared_subscription_available = 42;
 };
@@ -41,9 +44,17 @@ struct property
     {
         std::uint32_t value;
 
-        varlen_value &operator=(std::uint32_t v) {
+        varlen_value() = default;
+        varlen_value(std::uint32_t v) noexcept : value(v) {
+        }
+
+        varlen_value &operator=(std::uint32_t v) noexcept {
             value = v;
             return *this;
+        }
+
+        operator std::uint32_t() noexcept {
+            return value;
         }
     };
 
@@ -114,19 +125,19 @@ struct property
         property retval;
         retval.identifier = varlen_int::deserialize(data);
         retval.activate_id(retval.identifier);
-        std::visit(deserializer<Stream>{data}, retval.value);
+        std::visit(deserializer<Stream>{data}, retval.value_);
         return retval;
     }
 
     template <class Writer>
     static void serialize(const property &prop, Writer &writer) {
         varlen_int::serialize(prop.identifier, writer);
-        std::visit(serializer<Writer>{std::addressof(writer)}, prop.value);
+        std::visit(serializer<Writer>{std::addressof(writer)}, prop.value_);
     }
 
     void activate_id(std::uint8_t id) {
 #define ACTIVATE(X)                                                                                \
-    value.emplace<X>();                                                                            \
+    value_.emplace<X>();                                                                           \
     break
         switch (id) {
         case 1:
@@ -200,11 +211,7 @@ struct property
             boost::mp11::mp_any_of<value_storage, boost::mp11::mp_bind_back<std::is_assignable,
                                                                             T>::template fn>::value,
             "T cannot be used to assign to any potential property value");
-        std::visit(
-            [&, this](auto &elem) {
-                this->assign_value(elem, val);
-            },
-            value);
+        std::visit([&, this](auto &elem) { this->assign_value(elem, val); }, value_);
     }
 
     property() = default;
@@ -214,51 +221,98 @@ struct property
         set_id_value(id, val);
     }
 
+    template <class T>
+    T value_as() const {
+        T value;
+        std::visit([&, this](const auto &v) { get_value_into(value, v); }, value_);
+        return value;
+    }
+
     varlen_int::type identifier;
-    value_storage value;
+    value_storage value_;
 
 private:
-#define ENABLE_IF(...) std::enable_if_t<__VA_ARGS__>* = nullptr
-    template<class T, ENABLE_IF(std::is_integral_v<T>)>
-    void assign_value(varlen_value& elem, T val)
-    {
+#define ENABLE_IF(...) std::enable_if_t<__VA_ARGS__> * = nullptr
+    template <class T, ENABLE_IF(std::is_integral_v<T>)>
+    void assign_value(varlen_value &elem, T val) {
         elem.value = static_cast<std::uint32_t>(val);
     }
 
-    template<class U, class V, ENABLE_IF(std::is_integral_v<U> && std::is_integral_v<V>)>
-    void assign_value(U& elem, V val)
-    {
+    template <class U, class V, ENABLE_IF(std::is_integral_v<U> &&std::is_integral_v<V>)>
+    void assign_value(U &elem, V val) {
         elem = static_cast<U>(val);
     }
 
-    template<class T, ENABLE_IF(std::is_assignable_v<std::string&, const T&> && !std::is_integral_v<T>)>
-    void assign_value(std::string& elem, const T& val)
-    {
+    template <class T,
+              ENABLE_IF(std::is_assignable_v<std::string &, const T &> && !std::is_integral_v<T>)>
+    void assign_value(std::string &elem, const T &val) {
         elem = val;
     }
 
-    void assign_value(std::vector<std::uint8_t>& elem, const std::vector<std::uint8_t>& val) {
+    void assign_value(std::vector<std::uint8_t> &elem, const std::vector<std::uint8_t> &val) {
         elem = val;
     }
 
-    void assign_value(key_value_pair& elem, const key_value_pair& val) {
+    void assign_value(key_value_pair &elem, const key_value_pair &val) {
         elem = val;
     }
 
-    template<class U, class V>
+    template <class U, class V>
     struct mismatched_value_types
     {
-        static constexpr bool value = !(
-            (std::is_same_v<U, varlen_value> && std::is_integral_v<V>) ||
-            (std::is_integral_v<U> && std::is_integral_v<V>) ||
-            (std::is_same_v<U, std::string> && std::is_assignable_v<U&, const V&> && !std::is_integral_v<V>) ||
-            (std::is_same_v<U, V>)
-        );
+        static constexpr bool value =
+            !((std::is_same_v<U, varlen_value> && std::is_integral_v<V>) ||
+              (std::is_integral_v<U> && std::is_integral_v<V>) ||
+              (std::is_same_v<U, std::string> && std::is_assignable_v<U &, const V &> &&
+               !std::is_integral_v<V>) ||
+              (std::is_same_v<U, V>));
     };
 
-    template<class U, class V, ENABLE_IF(mismatched_value_types<U, V>::value)>
-    void assign_value(U&, const V&) {
+    template <class U, class V, ENABLE_IF(mismatched_value_types<U, V>::value)>
+    void assign_value(U &, const V &) {
         throw std::runtime_error("Mismatched attempt to set property types");
+    }
+
+    template <class T>
+    void get_value_into(T &val, const T &rhs) const {
+        val = rhs;
+    }
+
+    template <class T, ENABLE_IF(std::is_integral_v<T>)>
+    void get_value_into(T &val, varlen_value stored) const {
+        val = static_cast<T>(stored.value);
+    }
+
+    template <class U, class V, ENABLE_IF(std::is_integral_v<U> &&std::is_integral_v<V>)>
+    void get_value_into(U &val, V elem) const {
+        val = static_cast<U>(elem);
+    }
+
+    void get_value_into(std::string &val, const std::string &stored) const {
+        val = stored;
+    }
+
+    void get_value_into(std::vector<std::uint8_t> &val,
+                        const std::vector<std::uint8_t> &stored) const {
+        val = stored;
+    }
+
+    void get_value_into(key_value_pair &val, const key_value_pair &stored) const {
+        val = stored;
+    }
+
+    template <class U, class V>
+    struct mismatched_get_value_types
+    {
+        static constexpr bool value =
+            !((std::is_same_v<V, varlen_value> && std::is_integral_v<U>) ||
+              (std::is_integral_v<U> && std::is_integral_v<V>) ||
+              (std::is_same_v<U, std::string> && std::is_same_v<U, V>) || (std::is_same_v<U, V>));
+    };
+
+    template <class U, class V, ENABLE_IF(mismatched_get_value_types<U, V>::value)>
+    void get_value_into(U &, const V &) const {
+        throw std::runtime_error("Mismatched attempt to get property types");
     }
 
 #undef ENABLE_IF
@@ -304,7 +358,7 @@ struct properties
             auto iter = std::find_if(properties_.begin(), properties_.end(),
                                      [&](auto &p) { return p.identifier == prop.identifier; });
             if (iter != properties_.end()) {
-                iter->value = std::move(prop.value);
+                iter->value_ = std::move(prop.value_);
             }
             else {
                 properties_.emplace_back(std::move(prop));

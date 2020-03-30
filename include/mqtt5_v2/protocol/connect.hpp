@@ -59,31 +59,31 @@ struct connect
             for (const auto &prop : props) {
                 if (prop.identifier == property_ids::session_expiry_interval) {
                     retval.session_expiry_interval =
-                        std::chrono::seconds{std::get<std::uint32_t>(prop.value)};
+                        std::chrono::seconds{prop.value_as<std::uint32_t>()};
                 }
                 else if (prop.identifier == property_ids::receive_maximum) {
-                    retval.receive_maximum = std::get<std::uint16_t>(prop.value);
+                    retval.receive_maximum = prop.value_as<std::uint16_t>();
                 }
                 else if (prop.identifier == property_ids::maximum_packet_size) {
-                    retval.maximum_packet_size = std::get<std::uint32_t>(prop.value);
+                    retval.maximum_packet_size = prop.value_as<std::uint32_t>();
                 }
                 else if (prop.identifier == property_ids::topic_alias_maximum) {
-                    retval.topic_alias_maximum = std::get<std::uint16_t>(prop.value);
+                    retval.topic_alias_maximum = prop.value_as<std::uint16_t>();
                 }
                 else if (prop.identifier == property_ids::request_response_information) {
-                    retval.request_response_information = std::get<std::uint8_t>(prop.value);
+                    retval.request_response_information = prop.value_as<std::uint8_t>();
                 }
                 else if (prop.identifier == property_ids::request_problem_information) {
-                    retval.request_problem_information = std::get<std::uint8_t>(prop.value);
+                    retval.request_problem_information = prop.value_as<std::uint8_t>();
                 }
                 else if (prop.identifier == property_ids::user_property) {
-                    retval.user_properties.emplace_back(std::get<key_value_pair>(prop.value));
+                    retval.user_properties.emplace_back(prop.value_as<key_value_pair>());
                 }
                 else if (prop.identifier == property_ids::authentication_method) {
-                    retval.authentication_method = std::get<std::string>(prop.value);
+                    retval.authentication_method = prop.value_as<std::string>();
                 }
                 else if (prop.identifier == property_ids::authentication_data) {
-                    retval.authentication_data = std::get<std::vector<std::uint8_t>>(prop.value);
+                    retval.authentication_data = prop.value_as<std::vector<std::uint8_t>>();
                 }
                 else {
                     retval.unknown_properties.push_back(prop);
