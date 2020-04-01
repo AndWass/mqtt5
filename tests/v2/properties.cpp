@@ -11,8 +11,8 @@ TEST_CASE("property: byte deserializer")
     std::vector<std::uint8_t> data{0x28, 0x14};
     auto prop = mqtt5_v2::protocol::property::deserialize(mqtt5_v2::transport::buffer_data_fetcher(data));
     REQUIRE(prop.identifier == 0x28);
-    REQUIRE(prop.value.index() == 0);
-    REQUIRE(std::get<0>(prop.value) == 0x14);
+    REQUIRE(prop.value_.index() == 0);
+    REQUIRE(prop.value_as<int>() == 0x14);
 }
 
 TEST_CASE("property: string deserializer")
@@ -20,6 +20,6 @@ TEST_CASE("property: string deserializer")
     std::vector<std::uint8_t> data{0x03, 0x0, 0x05, 'h', 'e', 'l', 'l', 'o'};
     auto prop = mqtt5_v2::protocol::property::deserialize(mqtt5_v2::transport::buffer_data_fetcher(data));
     REQUIRE(prop.identifier == 0x3);
-    REQUIRE(prop.value.index() == 4);
-    REQUIRE(std::get<4>(prop.value) == "hello");
+    REQUIRE(prop.value_.index() == 4);
+    REQUIRE(prop.value_as<std::string>() == "hello");
 }
