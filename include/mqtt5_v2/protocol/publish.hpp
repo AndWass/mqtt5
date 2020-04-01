@@ -26,13 +26,12 @@ using std::end;
 class publish
 {
 public:
-    struct properties_t
+    struct properties_t: properties_t_base
     {
         std::string response_topic;
         std::string content_type;
 
         protocol::binary::type correlation_data;
-        std::vector<key_value_pair> user_property;
 
         std::uint32_t subscription_identifier = 0;
         std::chrono::duration<std::uint32_t> message_expiry_interval{0};
@@ -59,9 +58,6 @@ public:
                 else if (prop.identifier == ids::correlation_data) {
                     set_value(retval.correlation_data, prop);
                 }
-                else if (prop.identifier == ids::user_property) {
-                    retval.user_property.emplace_back(std::move(prop.value_as<key_value_pair>()));
-                }
                 else if (prop.identifier == ids::subscription_identifier) {
                     retval.subscription_identifier = prop.value_as<std::uint32_t>();
                 }
@@ -74,6 +70,9 @@ public:
                 }
                 else if (prop.identifier == ids::payload_format_indicator) {
                     set_value(retval.payload_format_indicator, prop);
+                }
+                else {
+                    retval.handle_property(prop);
                 }
             }
             return retval;
@@ -102,6 +101,7 @@ public:
             }
             maybe_add(&properties_t::topic_alias, ids::topic_alias);
             maybe_add(&properties_t::payload_format_indicator, ids::payload_format_indicator);
+            this->add_base_properties(props);
 
             props.serialize(writer);
         }
@@ -208,10 +208,9 @@ public:
 class puback
 {
 public:
-    struct properties_t
+    struct properties_t: properties_t_base
     {
         std::string reason_string;
-        std::vector<key_value_pair> user_property;
 
         template <class Stream>
         static properties_t deserialize(transport::data_fetcher<Stream> stream) {
@@ -222,8 +221,8 @@ public:
                 if (p.identifier == property_ids::reason_string) {
                     retval.reason_string = p.value_as<std::string>();
                 }
-                else if (p.identifier == property_ids::user_property) {
-                    retval.user_property.emplace_back(p.value_as<key_value_pair>());
+                else {
+                    retval.handle_property(p);
                 }
             }
             return retval;
@@ -235,9 +234,7 @@ public:
             if (!reason_string.empty()) {
                 props.add_property(property_ids::reason_string, reason_string);
             }
-            for (auto &up : user_property) {
-                props.add_property(property_ids::user_property, up);
-            }
+            this->add_base_properties(props);
             props.serialize(writer);
         }
     };

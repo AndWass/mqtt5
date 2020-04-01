@@ -38,6 +38,7 @@ struct property_ids
                                   subscription_identifiers_available = 41,
                                   shared_subscription_available = 42;
 };
+
 struct property
 {
     struct varlen_value
@@ -317,6 +318,7 @@ private:
 
 #undef ENABLE_IF
 };
+
 struct properties
 {
     template <class Stream>
@@ -402,4 +404,31 @@ struct properties
 private:
     std::vector<property> properties_;
 };
+
+struct properties_t_base
+{
+    std::vector<key_value_pair> user_property;
+    std::vector<property> unknown_properties;
+
+protected:
+    void handle_property(const property &prop) {
+        if (prop.identifier == property_ids::user_property) {
+            user_property.emplace_back(prop.value_as<key_value_pair>());
+        }
+        else {
+            unknown_properties.emplace_back(prop);
+        }
+    }
+
+    void add_base_properties(properties& props) const
+    {
+        for (auto&& kv : user_property) {
+            props.add_property(property_ids::user_property, kv);
+        }
+        for (auto&& prop : unknown_properties) {
+            props.add_property(prop);
+        }
+    }
+};
+
 } // namespace mqtt5_v2::protocol

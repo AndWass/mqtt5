@@ -8,7 +8,6 @@
 
 #include <boost/mp11/algorithm.hpp>
 
-#include <mqtt5_v2/protocol/connack.hpp>
 #include <mqtt5_v2/protocol/connect.hpp>
 #include <mqtt5_v2/protocol/ping.hpp>
 #include <mqtt5_v2/protocol/header.hpp>
