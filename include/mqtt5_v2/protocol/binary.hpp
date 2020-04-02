@@ -25,7 +25,7 @@ struct binary: detail::unconstructible
     using type = std::vector<std::uint8_t>;
 
     template<class Stream>
-    static std::vector<std::uint8_t> deserialize(transport::data_fetcher<Stream> fetcher)
+    [[nodiscard]] static std::vector<std::uint8_t> deserialize(transport::data_fetcher<Stream> fetcher)
     {
         auto bin_size = fixed_int<std::uint16_t>::deserialize(fetcher);
         auto data = fetcher.cspan();

@@ -40,7 +40,7 @@ public:
         std::uint8_t payload_format_indicator{0};
 
         template <class Stream>
-        static properties_t deserialize(transport::data_fetcher<Stream> data) {
+        [[nodiscard]] static properties_t deserialize(transport::data_fetcher<Stream> data) {
             properties_t retval;
             protocol::properties props;
             props.deserialize(data);
@@ -213,7 +213,7 @@ public:
         std::string reason_string;
 
         template <class Stream>
-        static properties_t deserialize(transport::data_fetcher<Stream> stream) {
+        [[nodiscard]] static properties_t deserialize(transport::data_fetcher<Stream> stream) {
             protocol::properties props;
             props.deserialize(stream);
             properties_t retval;

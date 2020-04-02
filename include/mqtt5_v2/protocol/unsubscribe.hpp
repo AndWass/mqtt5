@@ -20,10 +20,32 @@ namespace mqtt5_v2::protocol
 {
 struct unsubscribe
 {
+    struct properties_t: properties_t_base
+    {
+        template<class Stream>
+        [[nodiscard]] static properties_t deserialize(transport::data_fetcher<Stream> data)
+        {
+            properties_t retval;
+            protocol::properties props;
+            props.deserialize(data);
+            for (auto& prop: props) {
+                retval.handle_property(prop);
+            }
+            return retval;
+        }
+
+        template<class Writer>
+        void serialize(Writer&& writer) const
+        {
+            protocol::properties props;
+            this->add_base_properties(props);
+            props.serialize(writer);
+        }
+    };
     static constexpr std::uint8_t type_value = 10;
 
     std::uint16_t packet_identifier;
-    mqtt5_v2::protocol::properties properties;
+    properties_t properties;
     std::vector<std::string> topics;
 
     unsubscribe() = default;
@@ -35,7 +57,7 @@ struct unsubscribe
     void deserialize(transport::buffer_data_fetcher_t<nonstd::span<const std::uint8_t>> data)
     {
         packet_identifier = fixed_int<std::uint16_t>::deserialize(data);
-        properties.deserialize(data);
+        properties = properties_t::deserialize(data);
         while(!data.empty())
         {
             topics.emplace_back();
@@ -69,10 +91,41 @@ struct unsubscribe
 
 struct unsuback
 {
+    struct properties_t : properties_t_base
+    {
+        std::string reason_string;
+
+        template <class Stream>
+        [[nodiscard]] static properties_t deserialize(transport::data_fetcher<Stream> stream) {
+            protocol::properties props;
+            props.deserialize(stream);
+            properties_t retval;
+            for (auto &p : props) {
+                if (p.identifier == property_ids::reason_string) {
+                    retval.reason_string = p.value_as<std::string>();
+                }
+                else {
+                    retval.handle_property(p);
+                }
+            }
+            return retval;
+        }
+
+        template <class Writer>
+        void serialize(Writer &&writer) const {
+            protocol::properties props;
+            if (!reason_string.empty()) {
+                props.add_property(property_ids::reason_string, reason_string);
+            }
+            this->add_base_properties(props);
+            props.serialize(writer);
+        }
+    };
+
     static constexpr std::uint8_t type_value = 11;
 
     std::uint16_t packet_identifier;
-    mqtt5_v2::protocol::properties properties;
+    properties_t properties;
     std::vector<std::uint8_t> reason_codes;
 
     unsuback() = default;
@@ -84,7 +137,7 @@ struct unsuback
     void deserialize(transport::buffer_data_fetcher_t<nonstd::span<const std::uint8_t>> data)
     {
         packet_identifier = fixed_int<std::uint16_t>::deserialize(data);
-        properties.deserialize(data);
+        properties = properties_t::deserialize(data);
         auto data_span = data.cspan();
         reason_codes.resize(data.size());
         std::copy(data_span.begin(), data_span.end(), reason_codes.begin());

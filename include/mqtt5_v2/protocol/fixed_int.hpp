@@ -18,7 +18,7 @@ template<class T>
 struct fixed_int
 {
     template<class Stream>
-    static T deserialize(transport::data_fetcher<Stream> data) {
+    [[nodiscard]] static T deserialize(transport::data_fetcher<Stream> data) {
         std::make_unsigned_t<T> value = 0;
         auto my_data = data.cspan(sizeof(T));
 

@@ -26,7 +26,7 @@ namespace protocol
 struct string: detail::unconstructible
 {
     template<class Stream>
-    static std::string deserialize(transport::data_fetcher<Stream> fetcher)
+    [[nodiscard]] static std::string deserialize(transport::data_fetcher<Stream> fetcher)
     {
         auto string_size = fixed_int<std::uint16_t>::deserialize(fetcher);
         auto rest_of_data = fetcher.cspan(string_size);
@@ -49,7 +49,7 @@ struct key_value_pair
     struct deserialize_result;
 
     template<class Stream>
-    static key_value_pair deserialize(transport::data_fetcher<Stream> fetcher)
+    [[nodiscard]] static key_value_pair deserialize(transport::data_fetcher<Stream> fetcher)
     {
         key_value_pair retval;
         retval.key = string::deserialize(fetcher);

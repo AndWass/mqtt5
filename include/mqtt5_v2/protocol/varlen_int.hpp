@@ -24,7 +24,7 @@ struct varlen_int: detail::unconstructible
         return 268'435'455;
     }
 
-    static bool can_deserialize(nonstd::span<const std::uint8_t> data) {
+    [[nodiscard]] static bool can_deserialize(nonstd::span<const std::uint8_t> data) {
         if(data.size() >= 4) {
             return true;
         }
@@ -37,7 +37,7 @@ struct varlen_int: detail::unconstructible
     }
 
     template<class Stream>
-    static std::uint32_t deserialize(transport::data_fetcher<Stream> data)
+    [[nodiscard]] static std::uint32_t deserialize(transport::data_fetcher<Stream> data)
     {
         std::uint32_t value;
         std::uint32_t bytes_used;
@@ -66,7 +66,7 @@ struct varlen_int: detail::unconstructible
 
 private:
     template<class Stream>
-    static std::uint32_t deserialize(transport::data_fetcher<Stream> data, std::uint32_t &data_used) {
+    [[nodiscard]] static std::uint32_t deserialize(transport::data_fetcher<Stream> data, std::uint32_t &data_used) {
         auto data_span = data.cspan();
         std::uint32_t multiplier = 1;
         std::uint32_t value = 0;

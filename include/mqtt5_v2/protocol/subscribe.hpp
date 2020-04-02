@@ -35,8 +35,41 @@ public:
         std::uint8_t options;
     };
 
+    struct properties_t : properties_t_base
+    {
+        varlen_int::type subscription_identifier{ 0 };
+
+        template<class Stream>
+        [[nodiscard]] static properties_t deserialize(transport::data_fetcher<Stream> data)
+        {
+            properties_t retval;
+            protocol::properties props;
+            props.deserialize(data);
+            for (auto& prop : props) {
+                if (prop.identifier == property_ids::subscription_identifier) {
+                    retval.subscription_identifier = prop.value_as<varlen_int::type>();
+                }
+                else {
+                    retval.handle_property(prop);
+                }
+            }
+            return retval;
+        }
+
+        template<class Writer>
+        void serialize(Writer&& writer) const
+        {
+            protocol::properties props;
+            if (subscription_identifier != 0) {
+                props.add_property(property_ids::subscription_identifier, subscription_identifier);
+            }
+            add_base_properties(props);
+            props.serialize(writer);
+        }
+    };
+
     std::uint16_t packet_identifier = 0;
-    properties properties;
+    properties_t properties;
     std::vector<topic_filter> topics;
 
     static constexpr std::uint8_t type_value = 8;
@@ -51,7 +84,7 @@ public:
     void deserialize(transport::buffer_data_fetcher_t<nonstd::span<const std::uint8_t>> data)
     {
         packet_identifier = fixed_int<std::uint16_t>::deserialize(data);
-        properties.deserialize(data);
+        properties = properties_t::deserialize(data);
         while(!data.empty())
         {
             topic_filter topic;
@@ -89,8 +122,38 @@ public:
 class suback
 {
 public:
+    struct properties_t : properties_t_base
+    {
+        std::string reason_string;
+
+        template <class Stream>
+        [[nodiscard]] static properties_t deserialize(transport::data_fetcher<Stream> stream) {
+            protocol::properties props;
+            props.deserialize(stream);
+            properties_t retval;
+            for (auto &p : props) {
+                if (p.identifier == property_ids::reason_string) {
+                    retval.reason_string = p.value_as<std::string>();
+                }
+                else {
+                    retval.handle_property(p);
+                }
+            }
+            return retval;
+        }
+
+        template <class Writer>
+        void serialize(Writer &&writer) const {
+            protocol::properties props;
+            if (!reason_string.empty()) {
+                props.add_property(property_ids::reason_string, reason_string);
+            }
+            this->add_base_properties(props);
+            props.serialize(writer);
+        }
+    };
     std::uint16_t packet_identifier;
-    properties properties;
+    properties_t properties;
     std::vector<std::uint8_t> reason_codes;
 public:
     static constexpr std::uint8_t type_value = 9;
@@ -105,7 +168,7 @@ public:
     void deserialize(transport::buffer_data_fetcher_t<nonstd::span<const std::uint8_t>> data)
     {
         packet_identifier = fixed_int<std::uint16_t>::deserialize(data);
-        properties.deserialize(data);
+        properties = properties_t::deserialize(data);
         auto rest = data.cspan();
         reason_codes.clear();
 

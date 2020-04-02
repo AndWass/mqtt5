@@ -105,7 +105,7 @@ struct connect
         bool request_problem_information = false;
 
         template <class Stream>
-        static properties_t deserialize(transport::data_fetcher<Stream> data) {
+        [[nodiscard]] static properties_t deserialize(transport::data_fetcher<Stream> data) {
             protocol::properties props;
             props.deserialize(data);
             properties_t retval;
@@ -248,7 +248,7 @@ struct connack
         bool shared_subscription_available = true;
 
         template<class Stream>
-        static properties_t deserialize(transport::data_fetcher<Stream> data) {
+        [[nodiscard]] static properties_t deserialize(transport::data_fetcher<Stream> data) {
             protocol::properties props;
             props.deserialize(data);
             properties_t retval;

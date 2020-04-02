@@ -122,7 +122,7 @@ struct property
                                        std::string, std::vector<std::uint8_t>, key_value_pair>;
 
     template <class Stream>
-    static property deserialize(transport::data_fetcher<Stream> data) {
+    [[nodiscard]] static property deserialize(transport::data_fetcher<Stream> data) {
         property retval;
         retval.identifier = varlen_int::deserialize(data);
         retval.activate_id(retval.identifier);

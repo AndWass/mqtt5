@@ -6,13 +6,14 @@
 
 #pragma once
 
-#include <p0443_v2/with.hpp>
-#include <p0443_v2/just.hpp>
 #include <p0443_v2/asio/write_all.hpp>
+#include <p0443_v2/just.hpp>
+#include <p0443_v2/with.hpp>
 
 #include <mqtt5_v2/protocol/control_packet.hpp>
 
 #include <boost/beast/core/flat_buffer.hpp>
+#include <boost/type_traits/is_detected.hpp>
 
 #include <vector>
 
@@ -24,21 +25,12 @@ class connection
 private:
     AsyncStream stream_;
     boost::beast::basic_flat_buffer<std::allocator<std::uint8_t>> read_buffer_;
-
 public:
-    using next_layer_type = std::remove_reference_t<AsyncStream>;
-    using lowest_layer_type = typename next_layer_type::lowest_layer_type;
-    using executor_type = typename lowest_layer_type::executor_type;
+    using next_layer_type = typename std::remove_reference_t<AsyncStream>;
+    using executor_type = typename next_layer_type::executor_type;
 
     template <class... Args>
     connection(Args &&... args) : stream_(std::forward<Args>(args)...) {
-    }
-
-    lowest_layer_type &lowest_layer() {
-        return stream_.lowest_layer();
-    }
-    const lowest_layer_type &lowest_layer() const {
-        return stream_.lowest_layer();
     }
 
     next_layer_type &next_layer() {
@@ -51,32 +43,30 @@ public:
     auto control_packet_reader() {
         return p0443_v2::with(
             [this](protocol::control_packet &packet) {
-                return 
-                    p0443_v2::transform(packet.inplace_deserializer(
+                return p0443_v2::transform(
+                    packet.inplace_deserializer(
                         transport::data_fetcher<AsyncStream>(stream_, read_buffer_)),
-                        [&packet]() -> protocol::control_packet {
-                            return std::move(packet);
-                        });
+                    [&packet]() -> protocol::control_packet { return std::move(packet); });
             },
             protocol::control_packet{});
     }
 
-    template<class T>
+    template <class T>
     auto packet_reader() {
-        return p0443_v2::transform(control_packet_reader(), [](auto&& p) -> std::optional<T> {
+        return p0443_v2::transform(control_packet_reader(), [](auto &&p) -> std::optional<T> {
             return std::move(p).template body_as<T>();
         });
     }
 
     auto control_packet_writer(protocol::control_packet packet) {
         std::vector<std::uint8_t> buffer;
-        packet.serialize([&](auto b) {
-            buffer.push_back(b);
-        });
+        packet.serialize([&](auto b) { buffer.push_back(b); });
 
-        return p0443_v2::with([this](const auto &buffer) {
-            return p0443_v2::asio::write_all(stream_, boost::asio::buffer(buffer));
-        }, std::move(buffer));
+        return p0443_v2::with(
+            [this](const auto &buffer) {
+                return p0443_v2::asio::write_all(stream_, boost::asio::buffer(buffer));
+            },
+            std::move(buffer));
     }
 };
 } // namespace mqtt5_v2
