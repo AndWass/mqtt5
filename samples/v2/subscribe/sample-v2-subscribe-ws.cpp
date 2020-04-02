@@ -3,37 +3,53 @@
 
 #include <p0443_v2/asio/connect.hpp>
 #include <p0443_v2/asio/resolve.hpp>
+#include <p0443_V2/asio/handshake.hpp>
 #include <p0443_v2/await_sender.hpp>
 #include <p0443_v2/immediate_task.hpp>
 
 #include <boost/asio.hpp>
+#include <boost/beast.hpp>
 #include <boost/program_options.hpp>
 
 #include <iostream>
 
 namespace net = boost::asio;
 namespace ip = net::ip;
+namespace ws = boost::beast::websocket;
+namespace http = boost::beast::http;
 using tcp = ip::tcp;
 
 struct options
 {
     std::string host;
     std::string port;
+    std::string url;
     std::vector<std::string> topics;
 
     bool valid() const {
-        return !host.empty() && !port.empty() && !topics.empty();
+        return !host.empty() && !port.empty() && !topics.empty() && !url.empty();
     }
 };
 
 p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
-    mqtt5_v2::connection<tcp::socket> connection(io);
+
+    mqtt5_v2::connection<ws::stream<boost::beast::tcp_stream>> connection(io);
 
     auto resolve_result =
         co_await p0443_v2::await_sender(p0443_v2::asio::resolve(io, opt.host, opt.port));
     auto connected_ep = co_await p0443_v2::await_sender(
-        p0443_v2::asio::connect_socket(connection.next_layer(), resolve_result));
+        p0443_v2::asio::connect_socket(connection.next_layer().next_layer(), resolve_result));
 
+    // Need to set binary stream
+    connection.next_layer().binary(true);
+    // The Client MUST include "mqtt" in the list of WebSocket Sub Protocols it offers
+    auto handshake_decorator = [](ws::request_type& req) {
+        req.insert(http::field::sec_websocket_protocol, "mqtt");
+    };
+    connection.next_layer().set_option(ws::stream_base::decorator(handshake_decorator));
+    co_await p0443_v2::await_sender(p0443_v2::asio::handshake(connection.next_layer(), opt.host, opt.url));
+
+    std::cout << "WebSocket handshake complete\n";
     using connect_packet = mqtt5_v2::protocol::connect;
 
     mqtt5_v2::protocol::connect connect;
@@ -103,8 +119,9 @@ options parse_options(int argc, char **argv) {
     po::options_description desc("Options");
     desc.add_options()("help,h", "Print help")(
         "host", po::value<std::string>()->default_value("mqtt.eclipse.org"),
-        "Broker hostname")("port", po::value<std::string>()->default_value("1883"), "Broker port")(
-        "topic", po::value<std::vector<std::string>>(), "Topics to subscribe to");
+        "Broker hostname")("port", po::value<std::string>()->default_value("80"), "Broker port")(
+        "topic", po::value<std::vector<std::string>>(), "Topics to subscribe to")(
+        "url", po::value<std::string>()->default_value("/mqtt"), "WebSocket URL endpoint");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -124,6 +141,9 @@ options parse_options(int argc, char **argv) {
     }
     if (vm.count("topic")) {
         retval.topics = vm["topic"].as<std::vector<std::string>>();
+    }
+    if (vm.count("url")) {
+        retval.url = vm["url"].as<std::string>();
     }
     if (!retval.valid()) {
         std::cout << desc << "\n";
