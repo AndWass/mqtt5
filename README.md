@@ -9,6 +9,8 @@ At the moment only some basic MQTT5 frame parsing and serializing is available, 
 
 ## TCP and coroutine sample code
 
+The code below is taken from the complete [subscribe sample](https://gitlab.com/AndWass/mqtt5/-/blob/master/samples/subscribe/sample-subscribe.cpp).
+
 ```cpp
 // The MQTT5 connection object to work with
 mqtt5::connection<tcp::socket> connection(io);
@@ -111,7 +113,7 @@ connect.flags = prot::connect::clean_start_flag;
 co_await p0443_v2::await_sender(connection.control_packet_writer(connect));
 ```
 
-Becomes
+Becomes the code below. See the [subscribe websocket sample](https://gitlab.com/AndWass/mqtt5/-/blob/master/samples/subscribe/sample-subscribe-ws.cpp) for a complete working example.
 
 ```cpp
 // Use a beast websocket stream instead

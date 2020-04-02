@@ -8,8 +8,6 @@ add_library(${PROJECT_NAME} INTERFACE)
 target_link_libraries(${PROJECT_NAME} INTERFACE
     CONAN_PKG::span-lite
     CONAN_PKG::boost
-    CONAN_PKG::utfcpp
-    CONAN_PKG::stl_interfaces
     CONAN_PKG::p0443
 )
 

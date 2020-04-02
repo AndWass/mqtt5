@@ -11,8 +11,6 @@
 #include <variant>
 #include <vector>
 
-#include <utf8.h>
-
 #include <mqtt5/protocol/error.hpp>
 #include <mqtt5/protocol/fixed_int.hpp>
 
