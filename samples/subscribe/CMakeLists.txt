@@ -1,13 +1,12 @@
 add_executable(sample-subscribe sample-subscribe.cpp)
 target_link_libraries(sample-subscribe PRIVATE mqtt5)
 
-if(MQTT5_SSL_SAMPLES)
-    find_package(OpenSSL)
+if(TARGET CONAN_PKG::openssl)
     add_executable(sample-subscribe-ssl sample-subscribe-ssl.cpp)
-    target_link_libraries(sample-subscribe-ssl PRIVATE mqtt5 OpenSSL::SSL)
+    target_link_libraries(sample-subscribe-ssl PRIVATE mqtt5 CONAN_PKG::openssl)
 
     add_executable(sample-subscribe-ws-ssl sample-subscribe-ws-ssl.cpp)
-    target_link_libraries(sample-subscribe-ws-ssl PRIVATE mqtt5 OpenSSL::SSL)
+    target_link_libraries(sample-subscribe-ws-ssl PRIVATE mqtt5 CONAN_PKG::openssl)
 endif()
 
 add_executable(sample-subscribe-ws sample-subscribe-ws.cpp)
