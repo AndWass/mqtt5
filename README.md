@@ -106,42 +106,30 @@ auto connected_ep = co_await p0443_v2::await_sender(
 
 // Code from here on will not be modified
 namespace prot = mqtt5::protocol;
-
-// Create a connect packet and send it
-prot::connect connect;
-connect.flags = prot::connect::clean_start_flag;
-co_await p0443_v2::await_sender(connection.control_packet_writer(connect));
 ```
 
 Becomes the code below. See the [subscribe websocket sample](https://gitlab.com/AndWass/mqtt5/-/blob/master/samples/subscribe/sample-subscribe-ws.cpp) for a complete working example.
 
 ```cpp
-// Use a beast websocket stream instead
 mqtt5::connection<ws::stream<boost::beast::tcp_stream>> connection(io);
-// Resolve as before
-auto resolve_result =
-    co_await p0443_v2::await_sender(p0443_v2::asio::resolve(io, opt.host, opt.port));
-// Connect the underlying socket of the WebSocket stream
-auto connected_ep = co_await p0443_v2::await_sender(
-    p0443_v2::asio::connect_socket(connection.next_layer().next_layer(), resolve_result));
-
-// MQTT over WebSocket requires binary streams
+// Need to set binary stream
 connection.next_layer().binary(true);
-// The client must include "mqtt" in the list of WebSocket Sub Protocols it offers
+// The Client MUST include "mqtt" in the list of WebSocket Sub Protocols it offers
 auto handshake_decorator = [](ws::request_type& req) {
     req.insert(http::field::sec_websocket_protocol, "mqtt");
 };
 connection.next_layer().set_option(ws::stream_base::decorator(handshake_decorator));
-// Perform the WebSocket handshake
-co_await p0443_v2::await_sender(p0443_v2::asio::handshake(connection.next_layer(), opt.host, opt.url));
 
-std::cout << "WebSocket handshake complete\n";
+auto resolve_result =
+    co_await p0443_v2::await_sender(p0443_v2::asio::resolve(io, opt.host, opt.port));
 
-// All remaining code is the same as before.
+// Connect and handshake
+co_await p0443_v2::await_sender(
+    p0443_v2::sequence(
+        p0443_v2::asio::connect_socket(connection.next_layer().next_layer(), resolve_result),
+        p0443_v2::asio::handshake(connection.next_layer(), opt.host, opt.url)
+    )
+);
+
 namespace prot = mqtt5::protocol;
-
-// Create a connect packet and send it
-prot::connect connect;
-connect.flags = prot::connect::clean_start_flag;
-co_await p0443_v2::await_sender(connection.control_packet_writer(connect));
 ```
