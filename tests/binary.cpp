@@ -1,76 +1,46 @@
+#include <mqtt5/protocol/binary.hpp>
+
+#include <p0443_v2/sink_receiver.hpp>
+
+#include <mqtt5/protocol/string.hpp>
+#include <mqtt5/protocol/inplace_deserializer.hpp>
+
+#include <boost/asio/io_context.hpp>
+#include <boost/beast/_experimental/test/stream.hpp>
+
 #include <doctest/doctest.h>
 
-#include "mqtt5/type/binary.hpp"
+#include "vector_serialize.hpp"
 
-TEST_CASE("binary: Default construction")
+TEST_CASE("binary: inplace_deserialize")
 {
-    mqtt5::type::binary bin;
-    REQUIRE(bin.empty());
-    REQUIRE(bin.size() == 0);
-}
-
-TEST_CASE("binary: Construction of too big throws")
-{
-    std::vector<std::uint8_t> vec(65536, 1);
-    SUBCASE("vector copy")
-    {
-        REQUIRE_THROWS_AS([&]() {
-            mqtt5::type::binary bin(vec);
-        }(), boost::system::system_error);
-    }
-    SUBCASE("vector move")
-    {
-        REQUIRE_THROWS_AS([&]() {
-            mqtt5::type::binary bin(std::move(vec));
-        }(), boost::system::system_error);
-    }
-    SUBCASE("iterator construction")
-    {
-        REQUIRE_THROWS_AS([&]() {
-            mqtt5::type::binary bin(vec.begin(), vec.end());
-        }(), boost::system::system_error);
-    }
-}
-
-TEST_CASE("binary: insert that grows too big")
-{
-    std::vector<std::uint8_t> vec(65535, 1);
-    mqtt5::type::binary bin(vec);
-    SUBCASE("insert 1 value")
-    {
-        REQUIRE_THROWS_AS(bin.insert(bin.end(), 10), boost::system::system_error);
-    }
-    SUBCASE("insert initializer list")
-    {
-        mqtt5::type::binary bin2(vec.begin(), vec.begin() + 65530);
-        REQUIRE_THROWS_AS(bin2.insert(bin2.end(), {1,2,3,4,5,6,7,8}), boost::system::system_error);
-    }
-    SUBCASE("insert initializer iterator range")
-    {
-        mqtt5::type::binary bin2(vec.begin(), vec.begin() + 65530);
-        REQUIRE_THROWS_AS(bin2.insert(bin2.end(), vec.begin(), vec.begin() + 10), boost::system::system_error);
-    }
-    SUBCASE("push_back")
-    {
-        REQUIRE_THROWS_AS(bin.push_back(10), boost::system::system_error);
-    }
-    SUBCASE("push_front")
-    {
-        REQUIRE_THROWS_AS(bin.push_front(10), boost::system::system_error);
-    }
+    std::vector<std::uint8_t> buffer{
+        0,5,1,2,3,4,5,6,7
+    };
+    auto bin = mqtt5::protocol::binary::deserialize(mqtt5::transport::buffer_data_fetcher(buffer));
+    REQUIRE(bin.size() == 5);
+    REQUIRE(bin[0] == 1);
+    REQUIRE(bin[1] == 2);
+    REQUIRE(bin[2] == 3);
+    REQUIRE(bin[3] == 4);
+    REQUIRE(bin[4] == 5);
+    REQUIRE(buffer.size() == 2);
 }
 
 TEST_CASE("binary: serialize")
 {
-    mqtt5::type::binary bin({1,2,3,4,5});
-    std::vector<std::uint8_t> out_vec;
-    auto iter = serialize(bin, std::back_inserter(out_vec));
-    REQUIRE(out_vec.size() == 7);
-    REQUIRE(out_vec[0] == 0);
-    REQUIRE(out_vec[1] == 5);
-    REQUIRE(out_vec[2] == 1);
-    REQUIRE(out_vec[3] == 2);
-    REQUIRE(out_vec[4] == 3);
-    REQUIRE(out_vec[5] == 4);
-    REQUIRE(out_vec[6] == 5);
+    mqtt5::protocol::binary::type bin{1,2,3,4,5};
+
+    std::vector<std::uint8_t> vec;
+    mqtt5::protocol::binary::serialize(bin, [&](auto b) {
+        vec.push_back(b);
+    });
+    REQUIRE(vec.size() == 7);
+    REQUIRE(vec[0] == 0);
+    REQUIRE(vec[1] == 5);
+    REQUIRE(vec[2] == 1);
+    REQUIRE(vec[3] == 2);
+    REQUIRE(vec[4] == 3);
+    REQUIRE(vec[5] == 4);
+    REQUIRE(vec[6] == 5);
 }

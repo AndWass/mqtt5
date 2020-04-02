@@ -1,85 +1,127 @@
+#include <boost/program_options/options_description.hpp>
+#include <boost/program_options/parsers.hpp>
+#include <boost/program_options/variables_map.hpp>
+#include <mqtt5/connection.hpp>
+#include <mqtt5/protocol/control_packet.hpp>
+
+#include <p0443_v2/asio/connect.hpp>
+#include <p0443_v2/asio/resolve.hpp>
+#include <p0443_v2/asio/write_all.hpp>
+#include <p0443_v2/await_sender.hpp>
+#include <p0443_v2/immediate_task.hpp>
+
+#include <boost/program_options.hpp>
+#include <boost/asio.hpp>
+
 #include <iostream>
 
-#include <mqtt5/connection.hpp>
-#include <mqtt5/stream.hpp>
-#include <boost/asio.hpp>
-#include <boost/asio/deadline_timer.hpp>
+namespace net = boost::asio;
+namespace ip = net::ip;
+using tcp = ip::tcp;
 
-#include <thread>
+struct options
+{
+    std::string host;
+    std::string port = "1883";
 
-namespace asio = boost::asio;
+    bool valid() const {
+        return !host.empty() && !port.empty();
+    }
+};
 
-int main() {
-    asio::io_context io;
-    
-    asio::ip::tcp::resolver resolver(io);
-    asio::deadline_timer ping_timer(io);
-    auto resolved = resolver.resolve("test.mosquitto.org", "1883");
+p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
+    mqtt5::connection<tcp::socket> connection(io);
 
-    using connection_type = mqtt5::connection<asio::ip::tcp::socket>;
-    using stream_type = mqtt5::stream<asio::ip::tcp::socket>;
+    auto resolve_result = co_await p0443_v2::await_sender(
+        p0443_v2::asio::resolve(io, opt.host, opt.port));
+    auto connected_ep = co_await p0443_v2::await_sender(
+        p0443_v2::asio::connect_socket(connection.next_layer(), resolve_result));
 
-    stream_type stream(io);
-    stream.lowest_layer().connect(*resolved);
-    mqtt5::message::connect connect;
-    mqtt5::message::raw response;
-    stream.write(connect);
-    stream.read(response);
-    std::cout << (int)response.type << std::endl;
-    /*connection_type connection(io);
-    connection.will = mqtt5::publish{};
-    connection.will->topic_name = "/andreastest";
-    connection.will->set_payload("This is a last will");
-    connection.lowest_layer().connect(*resolved);
+    using connect_packet = mqtt5::protocol::connect;
 
-    struct ping_handler {
-        asio::deadline_timer *timer;
-        connection_type *conn;
-        void operator()(const boost::system::error_code &ec) {
-            if(!ec) {
-                std::cout << "PING\n";
-                mqtt5::message::raw pingreq;
-                pingreq.type = mqtt5::packet_type::pingreq;
-                conn->write(std::move(pingreq), ping_handler{timer, conn});
-                //conn->ping_request(ping_handler{timer, conn});
-            }
-            else {
-                std::cout << "Timer error: " << ec.message() << "\n";
-            }
+    mqtt5::protocol::connect connect;
+    connect.flags = connect_packet::clean_start_flag | connect_packet::will_flag |
+                    connect_packet::will_qos_1;
+
+    connect.will_topic = "/mqtt5/lastwill";
+    connect.set_will_payload("This is my last will and testament");
+    connect.will_properties.emplace();
+
+    co_await p0443_v2::await_sender(connection.control_packet_writer(connect));
+
+    auto read_packet = co_await p0443_v2::await_sender(connection.control_packet_reader());
+    auto *connack = read_packet.body_as<mqtt5::protocol::connack>();
+
+    if (connack && connack->reason_code == 0) {
+        std::cout << "Successfully connected to " << opt.host << ":" << opt.port << std::endl;
+        std::cout << "Assigned client id = " << connack->properties.assigned_client_id << std::endl;
+        mqtt5::protocol::publish publish;
+        publish.set_quality_of_service(1);
+        publish.packet_identifier = 1;
+        publish.topic = "/mqtt5/some_topic";
+        publish.set_payload("This is published from mqtt5 using c++ coroutines!");
+
+        std::cout << "Published "
+                  << co_await p0443_v2::await_sender(connection.control_packet_writer(publish))
+                  << " bytes\n";
+        read_packet = co_await p0443_v2::await_sender(connection.control_packet_reader());
+        auto *maybe_ack = read_packet.body_as<mqtt5::protocol::puback>();
+        if (maybe_ack) {
+            std::cout << "Received ACK(" << (int)maybe_ack->reason_code << ") for publish packet "
+                      << maybe_ack->packet_identifier << "\n";
         }
-
-        void set_done() {
-            timer->expires_from_now(boost::posix_time::seconds{15});
-            timer->async_wait(ping_handler{timer, conn});
+        else {
+            std::cout << "Did not receive an ACK!\n";
         }
-        void set_error(const boost::system::error_code &ec) {
-            std::cout << "PING ERROR " << ec.message() << "\n";
-        }
-    };
+    }
+    else if (connack) {
+        std::cout << "Received unsuccessful connack, reason code = " << (int)connack->reason_code
+                  << "\n";
+    }
+    else {
+        std::cout << "Received unexpected packet\n";
+    }
+    std::cout << std::endl;
+}
 
-    struct read_receiver_type {
-        connection_type *conn;
-        asio::deadline_timer *timer;
-        void set_value(const mqtt5::message::raw &packet) {
-            std::cout << "Received packet " << (int)packet.type << "\n";
-            conn->read(read_receiver_type{conn, timer});
-        }
-        void set_error(const boost::system::error_code &ec) {
-            std::cout << "READ ERROR: " << ec.message() << "\n";
-        }
-    };
+options parse_options(int argc, char**argv) {
+    namespace po = boost::program_options;
+    po::options_description desc("Options");
+    desc.add_options()("help,h", "Print help")
+    ("host", po::value<std::string>()->default_value("mqtt.eclipse.org"), "Broker hostname")
+    ("port", po::value<std::string>()->default_value("1883"), "Broker port");
 
-    auto handshake_receiver = mqtt5::on_done_or_error([&]() {
-        std::cout << "Handshake done\n";
-        connection.read(read_receiver_type{&connection, &ping_timer});
-        ping_handler pinger{&ping_timer, &connection};
-        pinger.set_done();
-    },
-    [](const auto &ec){
-        std::cout << ec.message() << "\n";
-    });
+    po::variables_map vm;
+    po::store(po::parse_command_line(argc, argv, desc), vm);
+    po::notify(vm);
 
-    connection.handshake(handshake_receiver);*/
+    if(vm.count("help")) {
+        std::cout << desc << "\n";
+        return {};
+    }
+
+    options retval;
+    if(vm.count("host")) {
+        retval.host = vm["host"].as<std::string>();
+    }
+    if(vm.count("port")) {
+        retval.port = vm["port"].as<std::string>();
+    }
+    if(!retval.valid()) {
+        std::cout << desc << "\n";
+        return {};
+    }
+
+    return retval;
+}
+
+int main(int argc, char** argv) {
+    auto options = parse_options(argc, argv);
+    if(!options.valid()) {
+        return 1;
+    }
+    net::io_context io;
+    mqtt_task(io, options);
 
     io.run();
 }

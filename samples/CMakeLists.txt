@@ -1,5 +1,6 @@
-if(MQTT5_ENABLE_LEGACY)
-    add_subdirectory(connect)
+if(MSVC)
+    add_compile_options(/bigobj)
 endif()
-
-add_subdirectory(v2)
+add_subdirectory(connect)
+add_subdirectory(subscribe)
+add_subdirectory(publish)

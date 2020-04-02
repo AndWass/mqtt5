@@ -17,7 +17,7 @@
             "request": "launch",
             "name": "Launch (lldb)",
             "program": "${command:cmake.launchTargetPath}",
-            "args": ["--topic", "mqtt5_v2/hello", "--message", "\"Hello world\""],
+            "args": ["--topic", "mqtt5/hello", "--message", "\"Hello world\""],
             "cwd": "${workspaceFolder}"
         },
         {
@@ -25,7 +25,7 @@
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${command:cmake.launchTargetPath}",
-            "args": ["--topic", "mqtt5_v2/hello"],
+            "args": ["--topic", "mqtt5/hello"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

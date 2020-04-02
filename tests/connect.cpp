@@ -1,62 +1,53 @@
-#include "mqtt5/message/connect.hpp"
-#include "mqtt5/connection.hpp"
+#include <mqtt5/protocol/connect.hpp>
+
+#include <p0443_v2/sink_receiver.hpp>
 
 #include <doctest/doctest.h>
-#include <iostream>
-#include <string_view>
-#include <set>
 
-TEST_CASE("connect: serializing of non-normative example")
+#include "vector_serialize.hpp"
+
+TEST_CASE("connect: serialize")
 {
-    mqtt5::message::connect example;
-    example.flags.username = true;
-    example.flags.password = true;
-    example.flags.will_flag = true;
-    example.flags.will_qos = mqtt5::publish::quality_of_service::qos1;
-    example.flags.clean_start = true;
-    example.keep_alive = std::chrono::seconds{10};
-    example.session_expiry_interval = 10;
-    example.client_id = "hello_world";
-    std::vector<std::uint8_t> serialized_example;
-    (void)mqtt5::message::serialize(example, std::back_inserter(serialized_example));
-    REQUIRE(serialized_example.size() >= 16+2+example.client_id.byte_size());
-    std::size_t i=0;
-    REQUIRE(serialized_example[i++] == 0);
-    REQUIRE(serialized_example[i++] == 4);
-    REQUIRE(serialized_example[i++] == 'M');
-    REQUIRE(serialized_example[i++] == 'Q');
-    REQUIRE(serialized_example[i++] == 'T');
-    REQUIRE(serialized_example[i++] == 'T');
-    REQUIRE(serialized_example[i++] == 5);
-    REQUIRE(serialized_example[i++] == 0b11001110);
-    REQUIRE(serialized_example[i++] == 0);
-    REQUIRE(serialized_example[i++] == 10);
-    REQUIRE(serialized_example[i++] == 5);
-    REQUIRE(serialized_example[i++] == 17);
-    REQUIRE(serialized_example[i++] == 0);
-    REQUIRE(serialized_example[i++] == 0);
-    REQUIRE(serialized_example[i++] == 0);
-    REQUIRE(serialized_example[i++] == 10);
-    // packet payload starts here
-    REQUIRE(serialized_example[i++] == 0);
-    REQUIRE(serialized_example[i++] == example.client_id.byte_size());
-    for(auto ch: example.client_id) {
-        REQUIRE(serialized_example[i++] == ch);
-    }
+    mqtt5::protocol::connect connect;
+    connect.keep_alive = std::chrono::seconds(10);
+
+    connect.connect_properties.session_expiry_interval = std::chrono::seconds(10);
+
+    auto bytes = vector_serialize(connect);
+    auto byte_len = bytes.size();
+    REQUIRE(byte_len == 20);
+    REQUIRE(bytes[0] == 0x10);
+    REQUIRE(bytes[1] == 18);
+    REQUIRE(bytes[2] == 0);
+    REQUIRE(bytes[3] == 4);
+    REQUIRE(bytes[4] == 'M');
+    REQUIRE(bytes[5] == 'Q');
+    REQUIRE(bytes[6] == 'T');
+    REQUIRE(bytes[7] == 'T');
+    REQUIRE(bytes[8] == 5);
+    REQUIRE(bytes[9] == 2);
+    REQUIRE(bytes[10] == 0);
+    REQUIRE(bytes[11] == 10);
+    REQUIRE(bytes[12] == 5);
+    REQUIRE(bytes[13] == 17);
+    REQUIRE(bytes[14] == 0);
+    REQUIRE(bytes[15] == 0);
+    REQUIRE(bytes[16] == 0);
+    REQUIRE(bytes[17] == 10);
+    REQUIRE(bytes[18] == 0);
+    REQUIRE(bytes[19] == 0);
 }
 
-TEST_CASE("check client_id generation implementation")
+TEST_CASE("connect: deserialize")
 {
-    std::set<std::string> client_ids;
-    for(int i=0; i<10'000; i++) {
-        auto id = mqtt5::generate_client_id();
-        REQUIRE(id.size() <= 23);
-        REQUIRE(std::all_of(id.begin(), id.end(), [](auto ch) {
-            using namespace std::string_view_literals;
-             static auto valid_characters = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"sv;
-             return valid_characters.find(ch) != std::string_view::npos;
-        }));
-        client_ids.emplace(id);
-    }
-    REQUIRE(client_ids.size() == 10'000);
+    std::vector<std::uint8_t> data = {
+        0, 4, 'M', 'Q', 'T', 'T', 5, 2,
+        0, 10, 5, 17, 0, 0, 0, 10, 0, 0};
+
+    mqtt5::protocol::connect packet;
+    packet.deserialize(mqtt5::transport::buffer_data_fetcher(data));
+
+    REQUIRE(data.empty());
+    REQUIRE(packet.keep_alive.count() == 10);
+    REQUIRE(packet.connect_properties.session_expiry_interval.count() == 10);
 }
