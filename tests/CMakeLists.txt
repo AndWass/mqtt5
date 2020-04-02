@@ -8,7 +8,6 @@ add_executable(mqtt5-tests
     header.cpp
     properties.cpp
     connect.cpp
-    optional_inplace_deserializer.cpp
 )
 
 target_link_libraries(mqtt5-tests PRIVATE 
