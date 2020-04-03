@@ -91,24 +91,25 @@ if (connack && connack->reason_code == 0) {
 
 ### WebSocket
 
-Only a few lines have to be modified to support a WebSocket stream using `boost::beast`:
+Only a few lines have to be modified to support a WebSocket stream using `boost::beast`. Subscribe examples for [TCP](https://gitlab.com/AndWass/mqtt5/-/blob/master/samples/subscribe/sample-subscribe.cpp)
+and [WebSockets](https://gitlab.com/AndWass/mqtt5/-/blob/master/samples/subscribe/sample-subscribe-ws.cpp) are available.
+
+The connection setup code for TCP socket is
 
 ```cpp
 // The MQTT5 connection object to work with
 mqtt5::connection<tcp::socket> connection(io);
-
-// Resolve the host and port
+// Resolve host and port
 auto resolve_result =
     co_await p0443_v2::await_sender(p0443_v2::asio::resolve(io, opt.host, opt.port));
-// Connect a socket using the resolve results
-auto connected_ep = co_await p0443_v2::await_sender(
+// Connect the TCP socket
+co_await p0443_v2::await_sender(
     p0443_v2::asio::connect_socket(connection.next_layer(), resolve_result));
-
-// Code from here on will not be modified
+// Use
 namespace prot = mqtt5::protocol;
 ```
 
-Becomes the code below. See the [subscribe websocket sample](https://gitlab.com/AndWass/mqtt5/-/blob/master/samples/subscribe/sample-subscribe-ws.cpp) for a complete working example.
+With websockets this becomes
 
 ```cpp
 mqtt5::connection<ws::stream<boost::beast::tcp_stream>> connection(io);
@@ -120,16 +121,17 @@ auto handshake_decorator = [](ws::request_type& req) {
 };
 connection.next_layer().set_option(ws::stream_base::decorator(handshake_decorator));
 
+// Resolve just like before
 auto resolve_result =
     co_await p0443_v2::await_sender(p0443_v2::asio::resolve(io, opt.host, opt.port));
-
-// Connect and handshake
+// Connect and handshake in a sequence
 co_await p0443_v2::await_sender(
     p0443_v2::sequence(
         p0443_v2::asio::connect_socket(connection.next_layer().next_layer(), resolve_result),
         p0443_v2::asio::handshake(connection.next_layer(), opt.host, opt.url)
-    )
-);
-
+));
+// From here on the code is exactly the same
 namespace prot = mqtt5::protocol;
 ```
+
+Everything else stays exactly the same.

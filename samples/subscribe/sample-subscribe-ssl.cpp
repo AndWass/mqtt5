@@ -4,14 +4,19 @@
 //    (See accompanying file LICENSE or copy at
 //          https://www.boost.org/LICENSE_1_0.txt)
 
+#include <boost/asio/ssl/rfc2818_verification.hpp>
+#include <boost/asio/ssl/verify_mode.hpp>
+#include <boost/beast/_experimental/test/stream.hpp>
 #include <mqtt5/connection.hpp>
 #include <mqtt5/protocol/control_packet.hpp>
 
+#include <p0443_v2/asio/handshake.hpp>
 #include <p0443_v2/asio/connect.hpp>
 #include <p0443_v2/asio/resolve.hpp>
 #include <p0443_v2/await_sender.hpp>
 #include <p0443_v2/immediate_task.hpp>
 
+#include <boost/asio/ssl.hpp>
 #include <boost/asio.hpp>
 #include <boost/program_options.hpp>
 
@@ -33,12 +38,19 @@ struct options
 };
 
 p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
-    mqtt5::connection<tcp::socket> connection(io);
+    namespace ssl = boost::asio::ssl;
+    ssl::context ctx(ssl::context::sslv23);
+    ctx.set_default_verify_paths();
+    mqtt5::connection<ssl::stream<tcp::socket>> connection(io, ctx);
+    connection.next_layer().set_verify_callback(ssl::rfc2818_verification(opt.host));
+    connection.next_layer().set_verify_mode(ssl::verify_peer);
 
     auto resolve_result =
         co_await p0443_v2::await_sender(p0443_v2::asio::resolve(io, opt.host, opt.port));
-    co_await p0443_v2::await_sender(
-        p0443_v2::asio::connect_socket(connection.next_layer(), resolve_result));
+    co_await p0443_v2::await_sender(p0443_v2::sequence(
+        p0443_v2::asio::connect_socket(connection.next_layer().next_layer(), resolve_result),
+        p0443_v2::asio::handshake(connection.next_layer(), ssl::stream<tcp::socket>::client)
+    ));
 
     namespace prot = mqtt5::protocol;
 
@@ -109,7 +121,7 @@ options parse_options(int argc, char **argv) {
     po::options_description desc("Options");
     desc.add_options()("help,h", "Print help")(
         "host", po::value<std::string>()->default_value("mqtt.eclipse.org"),
-        "Broker hostname")("port", po::value<std::string>()->default_value("1883"), "Broker port")(
+        "Broker hostname")("port", po::value<std::string>()->default_value("8883"), "Broker port")(
         "topic", po::value<std::vector<std::string>>(), "Topics to subscribe to");
 
     po::variables_map vm;

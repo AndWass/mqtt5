@@ -4,6 +4,9 @@ project(mqtt5)
 include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 conan_basic_setup(TARGETS)
 
+# Workaround for boost compile errors with concepts!
+add_definitions(-DBOOST_ASIO_DISABLE_CONCEPTS)
+
 add_library(${PROJECT_NAME} INTERFACE)
 target_link_libraries(${PROJECT_NAME} INTERFACE
     CONAN_PKG::span-lite

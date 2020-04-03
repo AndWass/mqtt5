@@ -9,7 +9,7 @@
 
 #include <p0443_v2/asio/connect.hpp>
 #include <p0443_v2/asio/resolve.hpp>
-#include <p0443_V2/asio/handshake.hpp>
+#include <p0443_v2/asio/handshake.hpp>
 #include <p0443_v2/await_sender.hpp>
 #include <p0443_v2/immediate_task.hpp>
 
@@ -50,14 +50,11 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
 
     auto resolve_result =
         co_await p0443_v2::await_sender(p0443_v2::asio::resolve(io, opt.host, opt.port));
-
-    // Connect and handshake
     co_await p0443_v2::await_sender(
         p0443_v2::sequence(
             p0443_v2::asio::connect_socket(connection.next_layer().next_layer(), resolve_result),
             p0443_v2::asio::handshake(connection.next_layer(), opt.host, opt.url)
-        )
-    );
+    ));
 
     namespace prot = mqtt5::protocol;
 
