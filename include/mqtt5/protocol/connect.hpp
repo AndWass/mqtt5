@@ -142,14 +142,84 @@ struct connect
         }
     };
 
+    struct will_properties_t : properties_t_base
+    {
+        std::string content_type;
+        std::string response_topic;
+        std::vector<std::uint8_t> correlation_data;
+
+        std::chrono::duration<std::uint32_t> delay_interval{0};
+        std::chrono::duration<std::uint32_t> message_expiry_interval{0};
+
+        std::uint8_t payload_format_indicator{0};
+
+        template <class Stream>
+        [[nodiscard]] static will_properties_t deserialize(transport::data_fetcher<Stream> data) {
+            protocol::properties props;
+            props.deserialize(data);
+            will_properties_t retval;
+            for (const auto &prop : props) {
+                if (prop.identifier == property_ids::content_type) {
+                    retval.content_type = prop.value_as<std::string>();
+                }
+                else if (prop.identifier == property_ids::response_topic) {
+                    retval.response_topic = prop.value_as<std::string>();
+                }
+                else if (prop.identifier == property_ids::correlation_data) {
+                    retval.correlation_data = prop.value_as<std::vector<std::uint8_t>>();
+                }
+                else if (prop.identifier == property_ids::will_delay_interval) {
+                    retval.delay_interval =
+                        decltype(retval.delay_interval){prop.value_as<std::uint32_t>()};
+                }
+                else if (prop.identifier == property_ids::message_expiry_interval) {
+                    retval.message_expiry_interval =
+                        decltype(retval.message_expiry_interval){prop.value_as<std::uint32_t>()};
+                }
+                else if (prop.identifier == property_ids::payload_format_indicator) {
+                    retval.payload_format_indicator = prop.value_as<std::uint8_t>();
+                }
+                else {
+                    retval.handle_property(prop);
+                }
+            }
+            return retval;
+        }
+
+        template <class Writer>
+        void serialize(Writer &&writer) const {
+            protocol::properties retval;
+            will_properties_t dflt;
+            auto maybe_add = [&, this](auto Ptr, std::uint8_t prop) {
+                if (this->*Ptr != dflt.*Ptr) {
+                    retval.add_property(prop, this->*Ptr);
+                }
+            };
+            using ids = property_ids;
+            using me = will_properties_t;
+            maybe_add(&me::content_type, ids::content_type);
+            maybe_add(&me::correlation_data, ids::correlation_data);
+            maybe_add(&me::payload_format_indicator, ids::payload_format_indicator);
+            maybe_add(&me::response_topic, ids::response_topic);
+            if(delay_interval.count() != 0) {
+                retval.add_property(ids::will_delay_interval, delay_interval.count());
+            }
+            if(message_expiry_interval.count() != 0) {
+                retval.add_property(ids::message_expiry_interval, message_expiry_interval.count());
+            }
+            add_base_properties(retval);
+            retval.serialize(writer);
+        }
+    };
+
     std::uint8_t version = 5;
-    std::uint8_t flags = 0x02;
+    std::uint8_t flags = 0;
     std::chrono::duration<std::uint16_t> keep_alive{240};
     properties_t connect_properties;
     std::string client_id;
-    std::optional<properties> will_properties;
-    std::optional<std::string> will_topic;
-    std::optional<binary::type> will_payload;
+    will_properties_t will_properties;
+    std::string will_topic;
+    binary::type will_payload;
     std::optional<std::string> username;
     std::optional<binary::type> password;
 
@@ -161,7 +231,8 @@ struct connect
 
     template <class InputIt>
     void set_will_payload(InputIt begin, InputIt end) {
-        will_payload.emplace(begin, end);
+        will_payload.clear();
+        will_payload.insert(will_payload.begin(), begin, end);
     }
 
     template <class T, class = decltype(begin(std::declval<const T &>()))>
@@ -184,7 +255,7 @@ struct connect
         connect_properties = properties_t::deserialize(fetcher);
         client_id = string::deserialize(fetcher);
         if (flags & will_flag) {
-            will_properties.emplace().deserialize(fetcher);
+            will_properties = will_properties_t::deserialize(fetcher);
             will_topic = string::deserialize(fetcher);
             will_payload = binary::deserialize(fetcher);
         }
@@ -205,14 +276,11 @@ struct connect
         fixed_int<std::uint16_t>::serialize(keep_alive.count(), writer);
         connect_properties.serialize(writer);
         string::serialize(client_id, writer);
-        if (will_properties) {
-            will_properties->serialize(writer);
-        }
-        if (will_topic) {
-            string::serialize(*will_topic, writer);
-        }
-        if (will_payload) {
-            binary::serialize(*will_payload, writer);
+        if(flags & will_flag)
+        {
+            will_properties.serialize(writer);
+            string::serialize(will_topic, writer);
+            binary::serialize(will_payload, writer);
         }
         if (username) {
             string::serialize(*username, writer);
@@ -232,7 +300,7 @@ struct connect
 
 struct connack
 {
-    struct properties_t: detail::connect_connack_properties_t
+    struct properties_t : detail::connect_connack_properties_t
     {
         std::string assigned_client_id;
         std::string reason_string;
@@ -247,7 +315,7 @@ struct connack
         bool subscription_identifiers_available = true;
         bool shared_subscription_available = true;
 
-        template<class Stream>
+        template <class Stream>
         [[nodiscard]] static properties_t deserialize(transport::data_fetcher<Stream> data) {
             protocol::properties props;
             props.deserialize(data);
@@ -277,8 +345,7 @@ struct connack
                     retval.shared_subscription_available = prop.value_as<std::uint8_t>();
                 }
                 else if (prop.identifier == ids::server_keep_alive) {
-                    retval.server_keep_alive =
-                        std::chrono::seconds{prop.value_as<std::uint16_t>()};
+                    retval.server_keep_alive = std::chrono::seconds{prop.value_as<std::uint16_t>()};
                 }
                 else if (prop.identifier == ids::response_information) {
                     retval.response_information = prop.value_as<std::string>();
@@ -293,8 +360,8 @@ struct connack
             return retval;
         }
 
-        template<class Writer>
-        void serialize(Writer&& writer) const {
+        template <class Writer>
+        void serialize(Writer &&writer) const {
             protocol::properties retval;
             properties_t dflt;
             using ids = property_ids;

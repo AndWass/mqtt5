@@ -13,6 +13,8 @@
 #include <mqtt5/protocol/string.hpp>
 #include <mqtt5/transport/data_fetcher.hpp>
 
+#include <mqtt5/puback_reason_code.hpp>
+
 #include <chrono>
 #include <functional>
 #include <iterator>
@@ -239,15 +241,10 @@ public:
         }
     };
     std::uint16_t packet_identifier;
-    std::uint8_t reason_code;
+    mqtt5::puback_reason_code reason_code;
     properties_t properties;
 
     static constexpr std::uint8_t type_value = 4;
-
-    static constexpr std::uint8_t success = 0, no_matching_subscribers = 16, unspecified = 128,
-                                  implementation_specific_error = 131, not_authorized = 135,
-                                  topic_name_invalid = 144, packet_identifier_in_use = 145,
-                                  quota_exceeded = 151, payload_format_invalid = 153;
 
     puback() = default;
     template <class T>
@@ -259,10 +256,10 @@ public:
     void deserialize(std::uint32_t remaining_length, transport::data_fetcher<Stream> data) {
         packet_identifier = fixed_int<std::uint16_t>::deserialize(data);
         if (remaining_length > 2) {
-            reason_code = fixed_int<std::uint8_t>::deserialize(data);
+            reason_code = static_cast<puback_reason_code>(fixed_int<std::uint8_t>::deserialize(data));
         }
         else {
-            reason_code = 0;
+            reason_code = puback_reason_code::success;
         }
 
         if (remaining_length >= 4) {
@@ -278,8 +275,8 @@ public:
         fixed_int<std::uint16_t>::serialize(packet_identifier, writer);
         bool serialize_properties =
             !properties.user_property.empty() || !properties.reason_string.empty();
-        if (reason_code || serialize_properties) {
-            fixed_int<std::uint8_t>::serialize(reason_code, writer);
+        if (reason_code != puback_reason_code::success || serialize_properties) {
+            fixed_int<std::uint8_t>::serialize(static_cast<std::uint8_t>(reason_code), writer);
             properties.serialize(writer);
         }
     }

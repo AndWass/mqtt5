@@ -8,6 +8,7 @@
 
 #include <p0443_v2/asio/write_all.hpp>
 #include <p0443_v2/just.hpp>
+#include <p0443_v2/type_traits.hpp>
 #include <p0443_v2/with.hpp>
 
 #include <mqtt5/protocol/control_packet.hpp>
@@ -38,6 +39,10 @@ public:
     }
     const next_layer_type &next_layer() const {
         return stream_;
+    }
+
+    executor_type get_executor() {
+        return stream_.get_executor();
     }
 
     auto control_packet_reader() {

@@ -51,7 +51,6 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
 
     connect.will_topic = "/mqtt5/lastwill";
     connect.set_will_payload("This is my last will and testament");
-    connect.will_properties.emplace();
 
     co_await p0443_v2::await_sender(connection.control_packet_writer(connect));
 

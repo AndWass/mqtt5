@@ -32,13 +32,22 @@ struct options
     }
 };
 
+template<class Executor, class Stream>
+auto resolve_and_connect(Executor& io, mqtt5::connection<Stream>& connection, const options& opt) {
+    return p0443_v2::then(
+        p0443_v2::asio::resolve(io, opt.host, opt.port),
+        [&connection](auto& resolve_results) {
+            return p0443_v2::asio::connect_socket(connection.next_layer(), resolve_results);
+        }
+    );
+}
+
 p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
     mqtt5::connection<tcp::socket> connection(io);
-
-    auto resolve_result =
-        co_await p0443_v2::await_sender(p0443_v2::asio::resolve(io, opt.host, opt.port));
+    net::io_context::strand strand(io);
     co_await p0443_v2::await_sender(
-        p0443_v2::asio::connect_socket(connection.next_layer(), resolve_result));
+        resolve_and_connect(strand, connection, opt)
+    );
 
     namespace prot = mqtt5::protocol;
 

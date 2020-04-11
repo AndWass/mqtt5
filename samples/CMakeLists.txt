@@ -1,6 +1,7 @@
 if(MSVC)
     add_compile_options(/bigobj)
 endif()
+add_subdirectory(client-connect)
 add_subdirectory(connect)
 add_subdirectory(subscribe)
 add_subdirectory(publish)
