@@ -31,7 +31,7 @@ struct CLIENT::connect_sender
                 client_->notify_connector_receivers(true);
             }
             else {
-                client_->connection_sm_->process_event(typename connection_sm_t::connect_evt{});
+                client_->connection_sm_->process_event(typename connection_sm_t::handshake_evt{});
             }
         }
     };

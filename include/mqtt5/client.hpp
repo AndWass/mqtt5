@@ -7,6 +7,7 @@
 #pragma once
 
 #include "connection.hpp"
+#include "detail/publish_sender.hpp"
 #include "mqtt5/connect_options.hpp"
 #include "mqtt5/protocol/connect.hpp"
 #include "mqtt5/protocol/ping.hpp"
@@ -62,112 +63,13 @@ private:
     struct connect_sender;
     struct subscriber_token;
 
-    struct publish_receiver_base
-    {
-        virtual void set_value(mqtt5::puback_reason_code code) = 0;
-        virtual void set_done() = 0;
-        virtual void set_error(std::exception_ptr e) = 0;
-
-        virtual ~publish_receiver_base() = default;
-    };
-    struct in_flight_publish
-    {
-        protocol::publish message_;
-        std::unique_ptr<publish_receiver_base> receiver_;
-    };
-
-    template <class Modifier>
-    struct publisher
-    {
-        template <template <class...> class Tuple, template <class...> class Variant>
-        using value_types = Variant<Tuple<mqtt5::puback_reason_code>>;
-
-        template <template <class...> class Variant>
-        using error_types = Variant<std::exception_ptr>;
-
-        static constexpr bool sends_done = true;
-
-        std::vector<std::uint8_t> payload;
-        std::string topic_;
-        Modifier modifying_function_;
-        client *client_;
-        std::uint8_t qos_ = 0;
-
-        publisher(Modifier modifier) : modifying_function_(std::move(modifier)) {
-        }
-
-        template <class Receiver>
-        struct operation
-        {
-            Receiver receiver_;
-
-            std::string topic_;
-            std::vector<std::uint8_t> payload;
-            Modifier modifying_function_;
-            client *client_;
-            std::uint8_t qos_;
-
-            struct publish_receiver : publish_receiver_base
-            {
-                Receiver next_;
-
-                publish_receiver(Receiver &&next) : next_(std::move(next)) {
-                }
-
-                void set_value(mqtt5::puback_reason_code code) override {
-                    p0443_v2::set_value(std::move(next_), code);
-                }
-
-                void set_done() override {
-                    p0443_v2::set_done(std::move(next_));
-                }
-
-                void set_error(std::exception_ptr ex) override {
-                    p0443_v2::set_error(std::move(next_), std::move(ex));
-                }
-            };
-
-            void start() {
-                protocol::publish publish;
-                publish.topic = std::move(topic_);
-                publish.payload = std::move(payload);
-                publish.set_quality_of_service(qos_);
-                modifying_function_(publish);
-
-                if (publish.quality_of_service() > 0) {
-                    publish.packet_identifier = client_->next_packet_identifier();
-                }
-
-                client_->send_message(publish);
-
-                if (publish.quality_of_service() > 0) {
-                    // Store message for further processing
-                    in_flight_publish stored{std::move(publish), std::make_unique<publish_receiver>(
-                                                                     std::move(receiver_))};
-
-                    client_->published_messages_.emplace_back(std::move(stored));
-                }
-                else {
-                    p0443_v2::set_value(std::move(receiver_), puback_reason_code::success);
-                }
-            }
-        };
-
-        template <class Receiver>
-        auto connect(Receiver &&receiver) {
-            return operation<p0443_v2::remove_cvref_t<Receiver>>{std::forward<Receiver>(receiver),
-                                                                 topic_,
-                                                                 payload,
-                                                                 modifying_function_,
-                                                                 client_,
-                                                                 qos_};
-        }
-    };
-
     struct receiver_base;
 
     template <class... Events>
     struct event_emitting_receiver;
+
+    template <class, class>
+    friend struct detail::publish_sender;
 
     net::executor executor_;
     std::vector<std::unique_ptr<typename connect_sender::receiver_base>> connect_receivers_;
@@ -179,7 +81,7 @@ private:
 
     std::chrono::duration<std::uint16_t> keep_alive_used_{0};
     std::string client_id_;
-    std::vector<in_flight_publish> published_messages_;
+    std::vector<detail::in_flight_publish> published_messages_;
 
     struct connection_sm_t;
 
@@ -188,8 +90,6 @@ private:
     void start_connect_timer();
     void start_ping_timer();
     void start_keep_alive_timer();
-
-    void resolve_and_connect();
 
     void send_connect() {
         protocol::connect connect;
@@ -269,7 +169,7 @@ private:
     void handle_puback(protocol::puback &puback);
 
     void close_underlying_connection() {
-        connection_.next_layer().close();
+        connection_.lowest_layer().close();
     }
 
     void notify_connector_receivers(const bool success) {
@@ -285,11 +185,28 @@ private:
         }
     }
 
+    template<int N, class T>
+    auto& get_nth_layer_impl(T &current) {
+        if constexpr(N == 0) {
+            return current;
+        }
+        else {
+            return get_nth_layer_impl<N-1>(current.next_layer());
+        }
+    }
+
 public:
     template <class... Args>
     client(const net::executor &executor, Args &&... args);
 
-    auto connector(connect_options opts) {
+    auto connect_socket(std::string_view host, std::string_view port);
+
+    template<int N>
+    auto& get_nth_layer() {
+        return get_nth_layer_impl<N>(connection_);
+    }
+
+    auto handshake(connect_options opts) {
         connect_opts_ = std::move(opts);
         // By using sequence with just we "move" our sender into the p0443 world
         // which gives us optional coroutine support for "free"
@@ -300,14 +217,15 @@ public:
     auto publish(std::string topic, Payload &&payload, std::uint8_t qos, Modifier &&modifier) {
         using modifier_t = p0443_v2::remove_cvref_t<Modifier>;
         using payload_t = p0443_v2::remove_cvref_t<Payload>;
-        publisher<modifier_t> pub(std::forward<Modifier>(modifier));
-        pub.client_ = this;
+        detail::publish_sender pub(this, std::forward<Modifier>(modifier));
         pub.topic_ = std::move(topic);
         if constexpr (std::is_same_v<payload_t, std::vector<std::uint8_t>>) {
             pub.payload = std::forward<Payload>(payload);
         }
         else {
-            std::copy(payload.begin(), payload.end(), std::back_inserter(pub.payload));
+            using std::begin;
+            using std::end;
+            std::copy(begin(payload), end(payload), std::back_inserter(pub.payload));
         }
         pub.qos_ = qos;
         return pub;
@@ -345,19 +263,12 @@ public:
 template <class Stream>
 struct client<Stream>::connection_sm_t
 {
-    struct connect_evt
-    {
-    };
-
-    struct net_connect_evt
-    {
-    };
-
+    struct handshake_evt {};
     struct disconnect_evt
     {
     };
 
-    struct connection_established_evt
+    struct handshake_done_evt
     {
     };
 
@@ -379,8 +290,7 @@ struct client<Stream>::connection_sm_t
     };
 
     static constexpr auto idle = boost::sml::state<struct idle>;
-    static constexpr auto start_connecting = boost::sml::state<struct start_connecting>;
-    static constexpr auto connecting = boost::sml::state<struct connecting>;
+    static constexpr auto start_handshake = boost::sml::state<struct start_handshake>;
     static constexpr auto handshaking = boost::sml::state<struct handshaking>;
     static constexpr auto connected = boost::sml::state<struct connected>;
     static constexpr auto disconnected = boost::sml::state<struct disconnected>;
@@ -398,11 +308,7 @@ struct client<Stream>::connection_sm_t
     auto operator()() {
         namespace sml = boost::sml;
 
-        auto ac_start_connecting = [this] {
-            client_->resolve_and_connect();
-            client_->start_connect_timer();
-        };
-        auto start_handshake = [this] { client_->send_connect(); };
+        auto ac_start_handshake = [this] { client_->start_connect_timer();  client_->send_connect(); };
         auto close_socket = [this] { client_->close_underlying_connection(); };
 
         auto start_receiving = [this] { client_->receive_one_message(); };
@@ -434,25 +340,24 @@ struct client<Stream>::connection_sm_t
         };
 
         return sml::make_transition_table(
-            *idle + sml::event<connect_evt> = start_connecting,
-            start_connecting / ac_start_connecting = connecting,
-            connecting + sml::event<net_connect_evt> / start_handshake = handshaking,
-            connecting + sml::event<disconnect_evt> / close_socket = disconnected,
+            *idle + sml::event<handshake_evt> = start_handshake,
+            start_handshake / ac_start_handshake = handshaking,
 
             handshaking + sml::event<packet_received_evt>[is_connack] / connection_established =
                 connected,
+            handshaking + sml::event<disconnect_evt> / close_socket = idle,
 
             connected + sml::event<packet_received_evt>[is_puback] / handle_puback = connected,
 
-            *rx_idle + sml::event<net_connect_evt> / start_receiving = rx_receiving,
+            *rx_idle + sml::event<handshake_evt> / start_receiving = rx_receiving,
             rx_receiving + sml::event<packet_received_evt> / start_receiving = rx_receiving,
             rx_receiving + sml::event<disconnect_evt> = rx_idle,
 
-            *ping_idle + sml::event<connection_established_evt> / start_ping_timer = ping_waiting,
+            *ping_idle + sml::event<handshake_done_evt> / start_ping_timer = ping_waiting,
             ping_waiting + sml::event<disconnect_evt> = ping_idle,
             ping_waiting + sml::event<ping_timeout_evt> / send_ping = ping_waiting,
 
-            *keep_alive_idle + sml::event<connection_established_evt> / start_keep_alive_timer =
+            *keep_alive_idle + sml::event<handshake_done_evt> / start_keep_alive_timer =
                 keep_alive_waiting,
             keep_alive_waiting + sml::event<packet_received_evt> / start_keep_alive_timer =
                 keep_alive_waiting,
@@ -472,17 +377,13 @@ client<Stream>::client(const net::executor &executor, Args &&... args)
 }
 
 template <class Stream>
-void client<Stream>::resolve_and_connect() {
-    auto resolve_connector = p0443_v2::transform(
-        p0443_v2::then(
-            p0443_v2::asio::resolve(executor_, connect_opts_.hostname, connect_opts_.port),
-            [this](auto results) {
-                return p0443_v2::asio::connect_socket(connection_.next_layer(), results);
-            }),
-        [](auto...) {});
-    p0443_v2::submit(std::move(resolve_connector),
-                     event_emitting_receiver<typename connection_sm_t::net_connect_evt,
-                                             typename connection_sm_t::disconnect_evt>{this});
+auto client<Stream>::connect_socket(std::string_view host, std::string_view port) {
+    return p0443_v2::transform(p0443_v2::then(p0443_v2::asio::resolve(executor_, host, port),
+                                              [this](auto results) {
+                                                  return p0443_v2::asio::connect_socket(
+                                                      connection_.lowest_layer(), results);
+                                              }),
+                               [](auto...) {});
 }
 
 template <class Stream>
@@ -503,7 +404,7 @@ void client<Stream>::handle_connack(protocol::connack &connack) {
         client_id_ = connack.properties.assigned_client_id;
     }
 
-    connection_sm_->process_event(typename connection_sm_t::connection_established_evt{});
+    connection_sm_->process_event(typename connection_sm_t::handshake_done_evt{});
     notify_connector_receivers(true);
 }
 
@@ -514,7 +415,7 @@ void client<Stream>::handle_puback(protocol::puback &puback) {
             return puback.packet_identifier == msg.message_.packet_identifier;
         });
     if (iter != published_messages_.end()) {
-        in_flight_publish to_finish = std::move(*iter);
+        detail::in_flight_publish to_finish = std::move(*iter);
         published_messages_.erase(iter);
         to_finish.receiver_->set_value(puback.reason_code);
     }

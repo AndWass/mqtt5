@@ -48,8 +48,6 @@ struct last_will_t
 struct connect_options
 {
     std::optional<last_will_t> last_will;
-    std::string hostname;
-    std::string port;
     std::string client_id;
 
     std::chrono::duration<std::uint16_t> keep_alive{0};

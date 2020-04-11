@@ -7,6 +7,7 @@
 #pragma once
 
 #include <p0443_v2/await_sender.hpp>
+#include <boost/type_traits/is_detected.hpp>
 
 namespace mqtt5
 {
