@@ -73,8 +73,8 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
             using puback_t = mqtt5::protocol::puback;
             if (puback) {
                 if (puback->packet_identifier == 1) {
-                    if (puback->reason_code == puback_t::success ||
-                        puback->reason_code == puback_t::no_matching_subscribers) {
+                    if (puback->reason_code == mqtt5::puback_reason_code::success ||
+                        puback->reason_code == mqtt5::puback_reason_code::no_matching_subscribers) {
                         std::cout << "Message delivered\n";
                     }
                     else {

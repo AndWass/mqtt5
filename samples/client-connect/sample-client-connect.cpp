@@ -15,12 +15,17 @@
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 
-//#include <mqtt5/coroutine.hpp>
+#include <p0443_v2/await_sender.hpp>
 #include <p0443_v2/asio/handshake.hpp>
 #include <p0443_v2/immediate_task.hpp>
 
 namespace net = boost::asio;
 using tcp = boost::asio::ip::tcp;
+
+template<class T>
+void inspect(const T& t) {
+    std::cout << "Inspect!\n";
+}
 
 p0443_v2::immediate_task tcp_client(net::io_context& io)
 {
@@ -37,18 +42,27 @@ p0443_v2::immediate_task tcp_client(net::io_context& io)
 
     mqtt5::client<tcp::socket> client(io.get_executor());
     co_await client.connect_socket(hostname, port);
-    std::cout << "Socket connected..." << std::endl;
+    std::cout << "Socket connected...\n";
     co_await client.handshake(opts);
     if(client.is_connected()) {
         std::cout  << "Connected!\n";
     }
-    auto result = co_await client.publish("mqtt5/test_publish", "hello world from TCP client!", 1, [](mqtt5::protocol::publish& pub) {
+
+    int packet_number = 1;
+    auto publisher = client.reusable_publisher("mqtt5/tcp_client", "hello world from TCP client! ", 1, [&packet_number](mqtt5::protocol::publish& pub) {
         pub.properties.topic_alias = 1;
+        if(packet_number > 1) {
+            pub.topic.clear();
+        }
+        auto packet_nr_string = std::to_string(packet_number);
+        pub.payload.insert(pub.payload.end(), packet_nr_string.begin(), packet_nr_string.end());
     });
-    std::cout << "Message published with code " << (int)result << "\n";
-    result = co_await client.publish("", "Published using topic alias from TCP client!", 1, [](mqtt5::protocol::publish& pub) {
-        pub.properties.topic_alias = 1;
-    });
+
+    for(int i=0; i<5; i++)
+    {
+        co_await publisher;
+        packet_number++;
+    }
 
     co_await p0443_v2::stdcoro::suspend_always{};
 }
@@ -81,11 +95,11 @@ p0443_v2::immediate_task websocket_client(net::io_context& io)
     if(client.is_connected()) {
         std::cout  << "Connected!\n";
     }
-    auto result = co_await client.publish("mqtt5/test_publish", "hello world from WebSocket client!", 1, [](mqtt5::protocol::publish& pub) {
+    auto result = co_await client.publisher("mqtt5/websocket_client", "hello world from WebSocket client!", 1, [](mqtt5::protocol::publish& pub) {
         pub.properties.topic_alias = 1;
     });
     std::cout << "Message published with code " << (int)result << "\n";
-    result = co_await client.publish("", "Published using topic alias from WebSocket client!", 1, [](mqtt5::protocol::publish& pub) {
+    result = co_await client.publisher("", "Published using topic alias from WebSocket client!", 1, [](mqtt5::protocol::publish& pub) {
         pub.properties.topic_alias = 1;
     });
 

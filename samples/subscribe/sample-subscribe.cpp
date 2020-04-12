@@ -90,11 +90,11 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
                         if (publish->quality_of_service() == 1) {
                             prot::puback ack;
                             ack.packet_identifier = publish->packet_identifier;
-                            ack.reason_code = 0;
+                            ack.reason_code = mqtt5::puback_reason_code::success;
 
                             std::cout << "  [PUBACK Packet identifier = " << ack.packet_identifier
                                       << "]\n";
-                            co_await p0443_v2::await_sender(connection.control_packet_writer(ack));
+                            co_await connection.control_packet_writer(ack);
                         }
                         else if (publish->quality_of_service() == 2) {
                             std::cout << "  !!Unsupported quality of service\n";

@@ -14,7 +14,6 @@ namespace mqtt5
 {
 
 #include "connect_sender.hpp"
-#include "subscriber_token.hpp"
 
 CLIENT_TEMPLATE
 struct CLIENT::receiver_base

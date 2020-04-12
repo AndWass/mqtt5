@@ -61,7 +61,6 @@ private:
         }
     } next_packet_identifier;
     struct connect_sender;
-    struct subscriber_token;
 
     struct receiver_base;
 
@@ -70,6 +69,9 @@ private:
 
     template <class, class>
     friend struct detail::publish_sender;
+
+    template <class, class>
+    friend struct detail::reusable_publish_sender;
 
     net::executor executor_;
     std::vector<std::unique_ptr<typename connect_sender::receiver_base>> connect_receivers_;
@@ -199,6 +201,10 @@ public:
     template <class... Args>
     client(const net::executor &executor, Args &&... args);
 
+    auto get_executor() {
+        return connection_.get_executor();
+    }
+
     auto connect_socket(std::string_view host, std::string_view port);
 
     template<int N>
@@ -214,7 +220,7 @@ public:
     }
 
     template <class Payload, class Modifier>
-    auto publish(std::string topic, Payload &&payload, std::uint8_t qos, Modifier &&modifier) {
+    auto publisher(std::string topic, Payload &&payload, std::uint8_t qos, Modifier &&modifier) {
         using modifier_t = p0443_v2::remove_cvref_t<Modifier>;
         using payload_t = p0443_v2::remove_cvref_t<Payload>;
         detail::publish_sender pub(this, std::forward<Modifier>(modifier));
@@ -231,8 +237,30 @@ public:
         return pub;
     }
 
-    auto publish(const std::string &topic, const std::string &message, std::uint8_t qos = 0) {
-        return publish(topic, message, qos, [](auto &) {});
+    auto publisher(const std::string &topic, const std::string &message, std::uint8_t qos = 0) {
+        return publisher(topic, message, qos, [](auto &) {});
+    }
+
+    template <class Payload, class Modifier>
+    auto reusable_publisher(std::string topic, Payload &&payload, std::uint8_t qos, Modifier &&modifier) {
+        using modifier_t = p0443_v2::remove_cvref_t<Modifier>;
+        using payload_t = p0443_v2::remove_cvref_t<Payload>;
+        detail::reusable_publish_sender pub(this, std::forward<Modifier>(modifier));
+        pub.topic_ = std::move(topic);
+        if constexpr (std::is_same_v<payload_t, std::vector<std::uint8_t>>) {
+            pub.payload = std::forward<Payload>(payload);
+        }
+        else {
+            using std::begin;
+            using std::end;
+            std::copy(begin(payload), end(payload), std::back_inserter(pub.payload));
+        }
+        pub.qos_ = qos;
+        return pub;
+    }
+
+    auto reusable_publisher(const std::string &topic, const std::string &message, std::uint8_t qos = 0) {
+        return reusable_publisher(topic, message, qos, [](auto &) {});
     }
 
     bool is_connected();
@@ -464,5 +492,4 @@ bool client<Stream>::is_handshaking() {
 }
 } // namespace mqtt5
 
-//#include "detail/client/connection_state_machine.ipp"
 #include "impl/client.hpp"
