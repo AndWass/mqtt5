@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "mqtt5/quality_of_service.hpp"
 #include <array>
 #include <chrono>
 #include <cstdint>
@@ -19,6 +20,7 @@
 #include <mqtt5/protocol/inplace_deserializer.hpp>
 #include <mqtt5/protocol/properties.hpp>
 #include <mqtt5/protocol/string.hpp>
+#include <mqtt5/quality_of_service.hpp>
 
 #include <p0443_v2/just.hpp>
 #include <p0443_v2/sequence.hpp>
@@ -201,10 +203,10 @@ struct connect
             maybe_add(&me::correlation_data, ids::correlation_data);
             maybe_add(&me::payload_format_indicator, ids::payload_format_indicator);
             maybe_add(&me::response_topic, ids::response_topic);
-            if(delay_interval.count() != 0) {
+            if (delay_interval.count() != 0) {
                 retval.add_property(ids::will_delay_interval, delay_interval.count());
             }
-            if(message_expiry_interval.count() != 0) {
+            if (message_expiry_interval.count() != 0) {
                 retval.add_property(ids::message_expiry_interval, message_expiry_interval.count());
             }
             add_base_properties(retval);
@@ -227,6 +229,22 @@ struct connect
     template <class T>
     connect(std::in_place_t, T fetcher) {
         deserialize(fetcher);
+    }
+
+    void set_will_qos(quality_of_service qos) {
+        std::uint8_t new_flags = flags & static_cast<std::uint8_t>(0b11100111);
+        switch (qos) {
+        case 0_qos:
+            // Do nothing...
+            break;
+        case 1_qos:
+            new_flags |= will_qos_1;
+            break;
+        case 2_qos:
+            new_flags |= will_qos_2;
+            break;
+        }
+        flags = new_flags;
     }
 
     template <class InputIt>
@@ -276,8 +294,7 @@ struct connect
         fixed_int<std::uint16_t>::serialize(keep_alive.count(), writer);
         connect_properties.serialize(writer);
         string::serialize(client_id, writer);
-        if(flags & will_flag)
-        {
+        if (flags & will_flag) {
             will_properties.serialize(writer);
             string::serialize(will_topic, writer);
             binary::serialize(will_payload, writer);
@@ -309,7 +326,7 @@ struct connack
 
         std::chrono::duration<std::uint16_t> server_keep_alive{0};
 
-        std::uint8_t maximum_qos = 2;
+        quality_of_service maximum_qos = 2_qos;
         bool retain_available = true;
         bool wildcard_subscriptions_available = true;
         bool subscription_identifiers_available = true;
@@ -324,7 +341,8 @@ struct connack
 
             for (const auto &prop : props) {
                 if (prop.identifier == ids::maximum_qos) {
-                    retval.maximum_qos = prop.value_as<std::uint8_t>();
+                    retval.maximum_qos =
+                        static_cast<quality_of_service>(prop.value_as<std::uint8_t>());
                 }
                 else if (prop.identifier == ids::retain_available) {
                     retval.retain_available = prop.value_as<std::uint8_t>();
@@ -373,7 +391,8 @@ struct connack
             };
 
             maybe_add(retain_available, dflt.retain_available, ids::retain_available);
-            maybe_add(maximum_qos, dflt.maximum_qos, ids::maximum_qos);
+            maybe_add(static_cast<std::uint8_t>(maximum_qos),
+                      static_cast<std::uint8_t>(dflt.maximum_qos), ids::maximum_qos);
             maybe_add(assigned_client_id, dflt.assigned_client_id, ids::assigned_client_id);
             maybe_add(reason_string, dflt.reason_string, ids::reason_string);
             maybe_add(wildcard_subscriptions_available, dflt.wildcard_subscriptions_available,

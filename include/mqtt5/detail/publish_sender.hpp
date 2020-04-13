@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "mqtt5/quality_of_service.hpp"
 #include <mqtt5/protocol/publish.hpp>
 
 namespace mqtt5::detail
@@ -39,7 +40,7 @@ struct publish_sender
     std::string topic_;
     Modifier modifying_function_;
     Client *client_;
-    std::uint8_t qos_ = 0;
+    quality_of_service qos_ = 0_qos;
 
     publish_sender(Client *client, Modifier modifier)
         : modifying_function_(std::move(modifier)), client_(client) {
@@ -54,7 +55,7 @@ struct publish_sender
         std::vector<std::uint8_t> payload;
         Modifier modifying_function_;
         Client *client_;
-        std::uint8_t qos_;
+        quality_of_service qos_;
 
         struct publish_receiver : publish_receiver_base
         {
@@ -83,13 +84,13 @@ struct publish_sender
             publish.set_quality_of_service(qos_);
             modifying_function_(publish);
 
-            if (publish.quality_of_service() > 0) {
+            if (publish.quality_of_service() != 0_qos) {
                 publish.packet_identifier = client_->next_packet_identifier();
             }
 
             client_->send_message(publish);
 
-            if (publish.quality_of_service() > 0) {
+            if (publish.quality_of_service() != 0_qos) {
                 // Store message for further processing
                 in_flight_publish stored{std::move(publish),
                                          std::make_unique<publish_receiver>(std::move(receiver_))};
@@ -124,7 +125,7 @@ struct reusable_publish_sender
     std::string topic_;
     Modifier modifying_function_;
     Client *client_;
-    std::uint8_t qos_ = 0;
+    quality_of_service qos_ = 0_qos;
 
     reusable_publish_sender(Client *client, Modifier modifier)
         : modifying_function_(std::move(modifier)), client_(client) {
@@ -151,7 +152,7 @@ struct reusable_publish_sender
         std::vector<std::uint8_t> payload;
         Modifier modifying_function_;
         Client *client_;
-        std::uint8_t qos_;
+        quality_of_service qos_;
 
         struct publish_receiver : publish_receiver_base
         {
@@ -180,13 +181,13 @@ struct reusable_publish_sender
             publish.set_quality_of_service(qos_);
             modifying_function_(publish);
 
-            if (publish.quality_of_service() > 0) {
+            if (publish.quality_of_service() != 0_qos) {
                 publish.packet_identifier = client_->next_packet_identifier();
             }
 
             client_->send_message(publish);
 
-            if (publish.quality_of_service() > 0) {
+            if (publish.quality_of_service() != 0_qos) {
                 // Store message for further processing
                 in_flight_publish stored{std::move(publish),
                                          std::make_unique<publish_receiver>(std::move(receiver_))};

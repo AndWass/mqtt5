@@ -4,6 +4,7 @@
 //    (See accompanying file LICENSE or copy at
 //          https://www.boost.org/LICENSE_1_0.txt)
 
+#include "mqtt5/quality_of_service.hpp"
 #include <mqtt5/connection.hpp>
 #include <mqtt5/protocol/control_packet.hpp>
 
@@ -22,17 +23,19 @@ namespace net = boost::asio;
 namespace ip = net::ip;
 using tcp = ip::tcp;
 
+using namespace mqtt5::literals;
+
 struct options
 {
     std::string host;
     std::string port;
     std::string topic;
     std::string message;
-    std::uint8_t quality_of_service;
+    mqtt5::quality_of_service quality_of_service;
 
     bool valid() const {
         return !host.empty() && !port.empty() && !topic.empty() && !message.empty() &&
-               quality_of_service < 3;
+               static_cast<int>(quality_of_service) < 3 ;
     }
 };
 
@@ -56,7 +59,7 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
         std::cout << "Successfully connected to " << opt.host << ":" << opt.port << std::endl;
         mqtt5::protocol::publish publish;
         publish.set_quality_of_service(opt.quality_of_service);
-        if (opt.quality_of_service > 0) {
+        if (opt.quality_of_service > 0_qos) {
             publish.packet_identifier = 1;
         }
         publish.topic = opt.topic;
@@ -66,7 +69,7 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
         std::cout << "Message sent to " << opt.topic
                   << " with QoS = " << (int)opt.quality_of_service << "\n";
 
-        if (opt.quality_of_service > 0) {
+        if (opt.quality_of_service > 0_qos) {
             auto puback = co_await p0443_v2::await_sender(
                 connection.packet_reader<mqtt5::protocol::puback>());
 
@@ -127,7 +130,7 @@ options parse_options(int argc, char **argv) {
         retval.message = vm["message"].as<std::string>();
     }
     if (vm.count("qos")) {
-        retval.quality_of_service = vm["qos"].as<int>();
+        retval.quality_of_service = static_cast<mqtt5::quality_of_service>(vm["qos"].as<int>());
     }
 
     if (!retval.valid()) {

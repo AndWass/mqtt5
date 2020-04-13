@@ -13,6 +13,7 @@
 #include "mqtt5/protocol/ping.hpp"
 #include "mqtt5/protocol/publish.hpp"
 #include "mqtt5/puback_reason_code.hpp"
+#include "mqtt5/quality_of_service.hpp"
 #include "protocol/control_packet.hpp"
 
 #include <boost/asio/executor.hpp>
@@ -92,88 +93,14 @@ private:
     void start_connect_timer();
     void start_ping_timer();
     void start_keep_alive_timer();
-
-    void send_connect() {
-        protocol::connect connect;
-        if (connect_opts_.last_will) {
-            connect.flags |= protocol::connect::will_flag;
-            if (connect_opts_.last_will->retain) {
-                connect.flags |= protocol::connect::will_retain_flag;
-            }
-            if (connect_opts_.last_will->quality_of_service == 1) {
-                connect.flags |= protocol::connect::will_qos_1;
-            }
-            else if (connect_opts_.last_will->quality_of_service == 2) {
-                connect.flags |= protocol::connect::will_qos_2;
-            }
-            connect.will_topic = connect_opts_.last_will->topic;
-            connect.will_payload = connect_opts_.last_will->payload;
-
-            connect.will_properties.content_type = connect_opts_.last_will->content_type;
-            connect.will_properties.response_topic = connect_opts_.last_will->response_topic;
-            connect.will_properties.correlation_data = connect_opts_.last_will->correlation_data;
-
-            connect.will_properties.delay_interval = connect_opts_.last_will->delay_interval;
-            connect.will_properties.message_expiry_interval =
-                connect_opts_.last_will->message_expiry_interval;
-
-            connect.will_properties.payload_format_indicator =
-                connect_opts_.last_will->payload_format_indicator;
-        }
-        keep_alive_used_ = connect_opts_.keep_alive;
-        client_id_ = connect_opts_.client_id;
-        connect.keep_alive = connect_opts_.keep_alive;
-        connect.client_id = connect_opts_.client_id;
-
-        connect.flags |= connect_opts_.clean_start ? 0 : protocol::connect::clean_start_flag;
-
-        if (!connect_opts_.username.empty()) {
-            connect.username = connect_opts_.username;
-            connect.flags |= protocol::connect::username_flag;
-        }
-        if (!connect_opts_.password.empty()) {
-            connect.password = connect_opts_.password;
-            connect.flags |= protocol::connect::password_flag;
-        }
-
-        send_message(std::move(connect));
-    }
-
-    void send_ping() {
-        std::cout << helper::steady_now << "Sending ping\n";
-        send_message(protocol::pingreq{});
-    }
+    void send_connect();
+    void send_ping();
 
     template <class T>
     void send_message(T &&msg);
-
-    void receive_one_message() {
-        struct receiver : receiver_base
-        {
-            void set_value(protocol::control_packet &&packet) {
-                this->client_->handle_message(std::move(packet));
-            }
-
-            void set_done() {
-                this->client_->connection_sm_->process_event(
-                    typename connection_sm_t::disconnect_evt{});
-            }
-        };
-        p0443_v2::submit(connection_.control_packet_reader(), receiver{this});
-    }
-
-    void handle_message(protocol::control_packet &&packet) {
-        std::cout << "Received message " << static_cast<int>(packet.packet_type()) << "\n";
-        connection_sm_->process_event(typename connection_sm_t::packet_received_evt{&packet});
-    }
-
+    void receive_one_message();
     void handle_connack(protocol::connack &connack);
     void handle_puback(protocol::puback &puback);
-
-    void close_underlying_connection() {
-        connection_.lowest_layer().close();
-    }
-
     void notify_connector_receivers(const bool success) {
         auto recvs = std::move(connect_receivers_);
         connect_receivers_.clear();
@@ -187,13 +114,13 @@ private:
         }
     }
 
-    template<int N, class T>
-    auto& get_nth_layer_impl(T &current) {
-        if constexpr(N == 0) {
+    template <int N, class T>
+    auto &get_nth_layer_impl(T &current) {
+        if constexpr (N == 0) {
             return current;
         }
         else {
-            return get_nth_layer_impl<N-1>(current.next_layer());
+            return get_nth_layer_impl<N - 1>(current.next_layer());
         }
     }
 
@@ -207,8 +134,8 @@ public:
 
     auto connect_socket(std::string_view host, std::string_view port);
 
-    template<int N>
-    auto& get_nth_layer() {
+    template <int N>
+    auto &get_nth_layer() {
         return get_nth_layer_impl<N>(connection_);
     }
 
@@ -220,7 +147,7 @@ public:
     }
 
     template <class Payload, class Modifier>
-    auto publisher(std::string topic, Payload &&payload, std::uint8_t qos, Modifier &&modifier) {
+    auto publisher(std::string topic, Payload &&payload, quality_of_service qos, Modifier &&modifier) {
         using modifier_t = p0443_v2::remove_cvref_t<Modifier>;
         using payload_t = p0443_v2::remove_cvref_t<Payload>;
         detail::publish_sender pub(this, std::forward<Modifier>(modifier));
@@ -237,12 +164,13 @@ public:
         return pub;
     }
 
-    auto publisher(const std::string &topic, const std::string &message, std::uint8_t qos = 0) {
+    auto publisher(const std::string &topic, const std::string &message, quality_of_service qos = 0_qos) {
         return publisher(topic, message, qos, [](auto &) {});
     }
 
     template <class Payload, class Modifier>
-    auto reusable_publisher(std::string topic, Payload &&payload, std::uint8_t qos, Modifier &&modifier) {
+    auto reusable_publisher(std::string topic, Payload &&payload, quality_of_service qos,
+                            Modifier &&modifier) {
         using modifier_t = p0443_v2::remove_cvref_t<Modifier>;
         using payload_t = p0443_v2::remove_cvref_t<Payload>;
         detail::reusable_publish_sender pub(this, std::forward<Modifier>(modifier));
@@ -259,12 +187,12 @@ public:
         return pub;
     }
 
-    auto reusable_publisher(const std::string &topic, const std::string &message, std::uint8_t qos = 0) {
+    auto reusable_publisher(const std::string &topic, const std::string &message,
+                            quality_of_service qos = 0_qos) {
         return reusable_publisher(topic, message, qos, [](auto &) {});
     }
 
     bool is_connected();
-
     bool is_handshaking();
 
     /**
@@ -291,7 +219,9 @@ public:
 template <class Stream>
 struct client<Stream>::connection_sm_t
 {
-    struct handshake_evt {};
+    struct handshake_evt
+    {
+    };
     struct disconnect_evt
     {
     };
@@ -336,8 +266,11 @@ struct client<Stream>::connection_sm_t
     auto operator()() {
         namespace sml = boost::sml;
 
-        auto ac_start_handshake = [this] { client_->start_connect_timer();  client_->send_connect(); };
-        auto close_socket = [this] { client_->close_underlying_connection(); };
+        auto ac_start_handshake = [this] {
+            client_->start_connect_timer();
+            client_->send_connect();
+        };
+        auto close_socket = [this] { client_->connection_.lowest_layer().close(); };
 
         auto start_receiving = [this] { client_->receive_one_message(); };
 
@@ -424,6 +357,23 @@ void client<Stream>::send_message(T &&message) {
 }
 
 template <class Stream>
+void client<Stream>::receive_one_message() {
+    struct receiver : receiver_base
+    {
+        void set_value(protocol::control_packet &&packet) {
+            this->client_->connection_sm_->process_event(
+                typename connection_sm_t::packet_received_evt{&packet});
+        }
+
+        void set_done() {
+            this->client_->connection_sm_->process_event(
+                typename connection_sm_t::disconnect_evt{});
+        }
+    };
+    p0443_v2::submit(connection_.control_packet_reader(), receiver{this});
+}
+
+template <class Stream>
 void client<Stream>::handle_connack(protocol::connack &connack) {
     if (connack.properties.server_keep_alive.count() != 0) {
         keep_alive_used_ = connack.properties.server_keep_alive;
@@ -479,6 +429,59 @@ void client<Stream>::start_keep_alive_timer() {
             p0443_v2::asio::timer::wait_for(keep_alive_timer_, keep_alive_used_),
             event_emitting_receiver<typename connection_sm_t::keep_alive_timeout_evt>{this});
     }
+}
+
+template <class Stream>
+void client<Stream>::send_connect() {
+    protocol::connect connect;
+    if (connect_opts_.last_will) {
+        connect.flags |= protocol::connect::will_flag;
+        if (connect_opts_.last_will->retain) {
+            connect.flags |= protocol::connect::will_retain_flag;
+        }
+        if (connect_opts_.last_will->quality_of_service == 1) {
+            connect.flags |= protocol::connect::will_qos_1;
+        }
+        else if (connect_opts_.last_will->quality_of_service == 2) {
+            connect.flags |= protocol::connect::will_qos_2;
+        }
+        connect.will_topic = connect_opts_.last_will->topic;
+        connect.will_payload = connect_opts_.last_will->payload;
+
+        connect.will_properties.content_type = connect_opts_.last_will->content_type;
+        connect.will_properties.response_topic = connect_opts_.last_will->response_topic;
+        connect.will_properties.correlation_data = connect_opts_.last_will->correlation_data;
+
+        connect.will_properties.delay_interval = connect_opts_.last_will->delay_interval;
+        connect.will_properties.message_expiry_interval =
+            connect_opts_.last_will->message_expiry_interval;
+
+        connect.will_properties.payload_format_indicator =
+            connect_opts_.last_will->payload_format_indicator;
+    }
+    keep_alive_used_ = connect_opts_.keep_alive;
+    client_id_ = connect_opts_.client_id;
+    connect.keep_alive = connect_opts_.keep_alive;
+    connect.client_id = connect_opts_.client_id;
+
+    connect.flags |= connect_opts_.clean_start ? 0 : protocol::connect::clean_start_flag;
+
+    if (!connect_opts_.username.empty()) {
+        connect.username = connect_opts_.username;
+        connect.flags |= protocol::connect::username_flag;
+    }
+    if (!connect_opts_.password.empty()) {
+        connect.password = connect_opts_.password;
+        connect.flags |= protocol::connect::password_flag;
+    }
+
+    send_message(std::move(connect));
+}
+
+template <class Stream>
+void client<Stream>::send_ping() {
+    std::cout << helper::steady_now << "Sending ping\n";
+    send_message(protocol::pingreq{});
 }
 
 template <class Stream>

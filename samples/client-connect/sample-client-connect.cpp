@@ -9,7 +9,6 @@
 #include <boost/beast/websocket/rfc6455.hpp>
 #include <boost/beast/websocket/stream_base.hpp>
 #include <chrono>
-#include <experimental/coroutine>
 #include <mqtt5/client.hpp>
 
 #include <boost/asio.hpp>
@@ -21,6 +20,8 @@
 
 namespace net = boost::asio;
 using tcp = boost::asio::ip::tcp;
+
+using namespace mqtt5::literals;
 
 template<class T>
 void inspect(const T& t) {
@@ -49,7 +50,7 @@ p0443_v2::immediate_task tcp_client(net::io_context& io)
     }
 
     int packet_number = 1;
-    auto publisher = client.reusable_publisher("mqtt5/tcp_client", "hello world from TCP client! ", 1, [&packet_number](mqtt5::protocol::publish& pub) {
+    auto publisher = client.reusable_publisher("mqtt5/tcp_client", "hello world from TCP client! ", 1_qos, [&packet_number](mqtt5::protocol::publish& pub) {
         pub.properties.topic_alias = 1;
         if(packet_number > 1) {
             pub.topic.clear();
@@ -95,11 +96,11 @@ p0443_v2::immediate_task websocket_client(net::io_context& io)
     if(client.is_connected()) {
         std::cout  << "Connected!\n";
     }
-    auto result = co_await client.publisher("mqtt5/websocket_client", "hello world from WebSocket client!", 1, [](mqtt5::protocol::publish& pub) {
+    auto result = co_await client.publisher("mqtt5/websocket_client", "hello world from WebSocket client!", 1_qos, [](mqtt5::protocol::publish& pub) {
         pub.properties.topic_alias = 1;
     });
     std::cout << "Message published with code " << (int)result << "\n";
-    result = co_await client.publisher("", "Published using topic alias from WebSocket client!", 1, [](mqtt5::protocol::publish& pub) {
+    result = co_await client.publisher("", "Published using topic alias from WebSocket client!", 1_qos, [](mqtt5::protocol::publish& pub) {
         pub.properties.topic_alias = 1;
     });
 

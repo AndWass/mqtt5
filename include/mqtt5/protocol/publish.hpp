@@ -14,6 +14,7 @@
 #include <mqtt5/transport/data_fetcher.hpp>
 
 #include <mqtt5/puback_reason_code.hpp>
+#include <mqtt5/quality_of_service.hpp>
 
 #include <chrono>
 #include <functional>
@@ -145,16 +146,15 @@ public:
         return header_flags & 0x08;
     }
 
-    void set_quality_of_service(std::uint8_t qos) {
-        qos &= 0x03;
-        if (qos == 0) {
+    void set_quality_of_service(mqtt5::quality_of_service qos) {
+        if (qos == quality_of_service::qos0) {
             set_duplicate(false);
         }
-        header_flags = (header_flags & 0x09) + (qos << 1);
+        header_flags = (header_flags & 0x09) + (static_cast<std::uint8_t>(qos) << 1);
     }
 
-    std::uint8_t quality_of_service() const {
-        return ((header_flags >> 1) & 0x03);
+    quality_of_service quality_of_service() const {
+        return static_cast<mqtt5::quality_of_service>((header_flags >> 1) & 0x03);
     }
 
     void set_retain(bool retain) {
@@ -167,7 +167,7 @@ public:
 
     void deserialize(transport::span_byte_data_fetcher_t data) {
         topic = string::deserialize(data);
-        if (quality_of_service() > 0) {
+        if (quality_of_service() != mqtt5::quality_of_service::qos0) {
             packet_identifier = fixed_int<std::uint16_t>::deserialize(data);
         }
         else {
