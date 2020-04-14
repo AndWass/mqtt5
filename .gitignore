@@ -69,3 +69,4 @@ build/
 .clangd/
 CMakeSettings.json
 .vs/
+*.pem
