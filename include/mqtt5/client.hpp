@@ -7,13 +7,18 @@
 #pragma once
 
 #include "connection.hpp"
+#include "detail/connect_sender.hpp"
 #include "detail/publish_sender.hpp"
+#include "detail/subscribe_sender.hpp"
+#include "detail/event_emitting_receiver.hpp"
+
 #include "mqtt5/connect_options.hpp"
 #include "mqtt5/protocol/connect.hpp"
 #include "mqtt5/protocol/ping.hpp"
 #include "mqtt5/protocol/publish.hpp"
 #include "mqtt5/puback_reason_code.hpp"
 #include "mqtt5/quality_of_service.hpp"
+#include "mqtt5/topic_filter.hpp"
 #include "protocol/control_packet.hpp"
 
 #include <boost/asio/executor.hpp>
@@ -61,21 +66,23 @@ private:
             return retval;
         }
     } next_packet_identifier;
-    struct connect_sender;
 
-    struct receiver_base;
-
-    template <class... Events>
-    struct event_emitting_receiver;
+    template <class Client, class... Events>
+    friend struct detail::event_emitting_receiver;
 
     template <class, class>
     friend struct detail::publish_sender;
+    template<class, class>
+    friend struct detail::subscribe_sender;
 
     template <class, class>
     friend struct detail::reusable_publish_sender;
 
+    template<class>
+    friend struct detail::connect_sender;
+
     net::executor executor_;
-    std::vector<std::unique_ptr<typename connect_sender::receiver_base>> connect_receivers_;
+    std::vector<std::unique_ptr<detail::connect_sender_receiver_base>> connect_receivers_;
     connection<Stream> connection_;
     net::steady_timer connect_and_ping_timer_;
     net::steady_timer keep_alive_timer_;
@@ -85,6 +92,7 @@ private:
     std::chrono::duration<std::uint16_t> keep_alive_used_{0};
     std::string client_id_;
     std::vector<detail::in_flight_publish> published_messages_;
+    std::vector<detail::in_flight_subscribe> subscribe_messages_;
 
     struct connection_sm_t;
 
@@ -101,6 +109,7 @@ private:
     void receive_one_message();
     void handle_connack(protocol::connack &connack);
     void handle_puback(protocol::puback &puback);
+    void handle_suback(protocol::suback &suback);
     void notify_connector_receivers(const bool success) {
         auto recvs = std::move(connect_receivers_);
         connect_receivers_.clear();
@@ -141,9 +150,7 @@ public:
 
     auto handshake(connect_options opts) {
         connect_opts_ = std::move(opts);
-        // By using sequence with just we "move" our sender into the p0443 world
-        // which gives us optional coroutine support for "free"
-        return connect_sender{this};
+        return detail::connect_sender{this};
     }
 
     template <class Payload, class Modifier>
@@ -190,6 +197,20 @@ public:
     auto reusable_publisher(const std::string &topic, const std::string &message,
                             quality_of_service qos = 0_qos) {
         return reusable_publisher(topic, message, qos, [](auto &) {});
+    }
+
+    template<class Modifier>
+    auto subscriber(std::vector<mqtt5::single_subscription> subs, Modifier&& modifier) {
+        using modifier_t = p0443_v2::remove_cvref_t<Modifier>;
+        auto retval = detail::subscribe_sender{this, std::forward<Modifier>(modifier)};
+        retval.subscriptions_ = std::move(subs);
+        return retval;
+    }
+    auto subscriber(topic_filter topic, mqtt5::quality_of_service qos) {
+        single_subscription single_sub;
+        single_sub.topic = topic;
+        single_sub.quality_of_service = qos;
+        return subscriber({single_sub}, [](auto&){});
     }
 
     bool is_connected();
@@ -282,6 +303,10 @@ struct client<Stream>::connection_sm_t
             return evt.packet->template is<protocol::puback>();
         };
 
+        auto is_suback = [](packet_received_evt evt) {
+            return evt.packet->template is<protocol::suback>();
+        };
+
         auto connection_established = [this](packet_received_evt connack) {
             std::cout << "Connection established...\n";
             client_->handle_connack(*connack.packet->template body_as<protocol::connack>());
@@ -289,6 +314,10 @@ struct client<Stream>::connection_sm_t
 
         auto handle_puback = [this](packet_received_evt puback) {
             client_->handle_puback(*puback.packet->template body_as<protocol::puback>());
+        };
+
+        auto handle_suback = [this](packet_received_evt suback) {
+            client_->handle_suback(*suback.packet->template body_as<protocol::suback>());
         };
 
         auto start_ping_timer = [this] { client_->start_ping_timer(); };
@@ -309,6 +338,7 @@ struct client<Stream>::connection_sm_t
             handshaking + sml::event<disconnect_evt> / close_socket = idle,
 
             connected + sml::event<packet_received_evt>[is_puback] / handle_puback = connected,
+            connected + sml::event<packet_received_evt>[is_suback] / handle_suback = connected,
 
             *rx_idle + sml::event<handshake_evt> / start_receiving = rx_receiving,
             rx_receiving + sml::event<packet_received_evt> / start_receiving = rx_receiving,
@@ -352,13 +382,13 @@ template <class T>
 void client<Stream>::send_message(T &&message) {
     std::cout << "Writing msg " << (int)message.type_value << "\n";
     p0443_v2::submit(connection_.control_packet_writer(std::forward<T>(message)),
-                     event_emitting_receiver<typename connection_sm_t::packet_written_evt,
+                     detail::event_emitting_receiver<client<Stream>, typename connection_sm_t::packet_written_evt,
                                              typename connection_sm_t::disconnect_evt>{this});
 }
 
 template <class Stream>
 void client<Stream>::receive_one_message() {
-    struct receiver : receiver_base
+    struct receiver : detail::event_emitting_receiver_base<client<Stream>>
     {
         void set_value(protocol::control_packet &&packet) {
             this->client_->connection_sm_->process_event(
@@ -400,17 +430,28 @@ void client<Stream>::handle_puback(protocol::puback &puback) {
 }
 
 template <class Stream>
-void client<Stream>::start_connect_timer() {
-    struct receiver : receiver_base
-    {
-        void set_value() {
-            this->client_->connection_sm_->process_event(
-                typename connection_sm_t::disconnect_evt{});
+void client<Stream>::handle_suback(protocol::suback &suback) {
+    auto iter =
+        std::find_if(subscribe_messages_.begin(), subscribe_messages_.end(), [&](auto &msg) {
+            return suback.packet_identifier == msg.message_.packet_identifier;
+        });
+    if (iter != subscribe_messages_.end()) {
+        detail::in_flight_subscribe to_finish = std::move(*iter);
+        subscribe_messages_.erase(iter);
+        mqtt5::subscribe_result result;
+        result.codes.reserve(suback.reason_codes.size());
+        for(auto &c: suback.reason_codes) {
+            result.codes.push_back(static_cast<subscribe_result::result_code>(c));
         }
-    };
+        to_finish.receiver_->set_value(std::move(result));
+    }
+}
+
+template <class Stream>
+void client<Stream>::start_connect_timer() {
     p0443_v2::submit(
         p0443_v2::asio::timer::wait_for(connect_and_ping_timer_, std::chrono::seconds{5}),
-        event_emitting_receiver<typename connection_sm_t::disconnect_evt>{this});
+        detail::event_emitting_receiver<client<Stream>, typename connection_sm_t::disconnect_evt>{this});
 }
 
 template <class Stream>
@@ -418,7 +459,7 @@ void client<Stream>::start_ping_timer() {
     if (keep_alive_used_.count() > 0) {
         p0443_v2::submit(
             p0443_v2::asio::timer::wait_for(connect_and_ping_timer_, keep_alive_used_ / 2),
-            event_emitting_receiver<typename connection_sm_t::ping_timeout_evt>{this});
+            detail::event_emitting_receiver<client<Stream>, typename connection_sm_t::ping_timeout_evt>{this});
     }
 }
 
@@ -427,7 +468,7 @@ void client<Stream>::start_keep_alive_timer() {
     if (keep_alive_used_.count() > 0) {
         p0443_v2::submit(
             p0443_v2::asio::timer::wait_for(keep_alive_timer_, keep_alive_used_),
-            event_emitting_receiver<typename connection_sm_t::keep_alive_timeout_evt>{this});
+            detail::event_emitting_receiver<client<Stream>, typename connection_sm_t::keep_alive_timeout_evt>{this});
     }
 }
 
@@ -494,5 +535,3 @@ bool client<Stream>::is_handshaking() {
     return connection_sm_->is(connection_sm_t::handshaking);
 }
 } // namespace mqtt5
-
-#include "impl/client.hpp"

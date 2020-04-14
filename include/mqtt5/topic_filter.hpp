@@ -74,6 +74,13 @@ private:
     }
 
 public:
+    topic_filter() = default;
+    topic_filter(const char* topic) {
+        parse_inplace(topic);
+    }
+    topic_filter(std::string_view topic) {
+        parse_inplace(topic);
+    }
     std::string to_string() {
         assert(!levels_.empty());
 
@@ -89,8 +96,7 @@ public:
         return retval;
     }
     static topic_filter from_string(std::string_view string) {
-        topic_filter retval;
-        retval.parse_inplace(string);
+        topic_filter retval(string);
         return retval;
     }
 

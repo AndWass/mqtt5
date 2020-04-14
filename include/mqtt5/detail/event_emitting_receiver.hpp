@@ -6,19 +6,14 @@
 
 #pragma once
 
-#include <mqtt5/client.hpp>
+#include <exception>
 
-#include "client_macro_begin.hpp"
-
-namespace mqtt5
+namespace mqtt5::detail
 {
-
-#include "connect_sender.hpp"
-
-CLIENT_TEMPLATE
-struct CLIENT::receiver_base
+template<class Client>
+struct event_emitting_receiver_base
 {
-    client *client_;
+    Client *client_;
     void set_done() {
     }
     template <class E>
@@ -28,9 +23,11 @@ struct CLIENT::receiver_base
     }
 };
 
-CLIENT_TEMPLATE
-template <class ValueEvent>
-struct CLIENT::event_emitting_receiver<ValueEvent> : receiver_base, ValueEvent
+template<class Client, class...Events>
+struct event_emitting_receiver;
+
+template <class Client, class ValueEvent>
+struct event_emitting_receiver<Client, ValueEvent> : event_emitting_receiver_base<Client>, ValueEvent
 {
     template <class... Values>
     void set_value(Values &&...) {
@@ -38,10 +35,9 @@ struct CLIENT::event_emitting_receiver<ValueEvent> : receiver_base, ValueEvent
     }
 };
 
-CLIENT_TEMPLATE
-template <class ValueEvent, class DoneEvent>
-struct CLIENT::event_emitting_receiver<ValueEvent, DoneEvent>
-    : receiver_base, ValueEvent, DoneEvent
+template <class Client, class ValueEvent, class DoneEvent>
+struct event_emitting_receiver<Client, ValueEvent, DoneEvent>
+    : event_emitting_receiver_base<Client>, ValueEvent, DoneEvent
 {
     template <class... Values>
     void set_value(Values &&...) {
@@ -52,6 +48,4 @@ struct CLIENT::event_emitting_receiver<ValueEvent, DoneEvent>
         this->client_->connection_sm_->process_event(static_cast<DoneEvent &>(*this));
     }
 };
-} // namespace mqtt5
-
-#include "client_macro_end.hpp"
+}

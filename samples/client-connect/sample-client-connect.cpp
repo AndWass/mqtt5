@@ -49,6 +49,9 @@ p0443_v2::immediate_task tcp_client(net::io_context& io)
         std::cout  << "Connected!\n";
     }
 
+    auto sub_result = co_await client.subscriber("mqtt5/+", 0_qos);
+    std::cout << "Subscribed to mqtt5/+ with result " << (int)sub_result.codes.front() << "\n";
+
     int packet_number = 1;
     auto publisher = client.reusable_publisher("mqtt5/tcp_client", "hello world from TCP client! ", 1_qos, [&packet_number](mqtt5::protocol::publish& pub) {
         pub.properties.topic_alias = 1;

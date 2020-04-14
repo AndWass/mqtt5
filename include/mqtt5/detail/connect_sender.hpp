@@ -6,14 +6,24 @@
 
 #pragma once
 
-#include <mqtt5/client.hpp>
+#include <p0443_v2/set_done.hpp>
+#include <p0443_v2/set_error.hpp>
+#include <p0443_v2/set_value.hpp>
 
-#include "client_macro_begin.hpp"
-
-CLIENT_TEMPLATE
-struct CLIENT::connect_sender
+namespace mqtt5::detail
 {
-    client *client_;
+struct connect_sender_receiver_base
+{
+    virtual ~connect_sender_receiver_base() = default;
+
+    virtual void set_value() = 0;
+    virtual void set_done() = 0;
+    virtual void set_error(std::exception_ptr) = 0;
+};
+template <class Client>
+struct connect_sender
+{
+    Client *client_;
 
     template <template <class...> class Tuple, template <class...> class Variant>
     using value_types = Variant<Tuple<>>;
@@ -25,28 +35,20 @@ struct CLIENT::connect_sender
 
     struct operation
     {
-        client *client_;
+        Client *client_;
         void start() {
-            if(client_->is_connected()) {
+            if (client_->is_connected()) {
                 client_->notify_connector_receivers(true);
             }
             else {
-                client_->connection_sm_->process_event(typename connection_sm_t::handshake_evt{});
+                client_->connection_sm_->process_event(
+                    typename Client::connection_sm_t::handshake_evt{});
             }
         }
     };
 
-    struct receiver_base
-    {
-        virtual ~receiver_base() = default;
-
-        virtual void set_value() = 0;
-        virtual void set_done() = 0;
-        virtual void set_error(std::exception_ptr) = 0;
-    };
-
     template <class Receiver>
-    struct receiver_impl : receiver_base
+    struct receiver_impl : connect_sender_receiver_base
     {
         p0443_v2::remove_cvref_t<Receiver> next_;
 
@@ -65,13 +67,12 @@ struct CLIENT::connect_sender
     };
 
     template <class Receiver>
-    auto connect(Receiver &&receiver);
+    auto connect(Receiver &&receiver) {
+        client_->connect_receivers_.emplace_back(new receiver_impl<Receiver>{std::move(receiver)});
+        return operation{client_};
+    }
 };
 
-CLIENT_TEMPLATE
-template<class Receiver>
-auto CLIENT::connect_sender::connect(Receiver&& receiver)
-{
-    client_->connect_receivers_.emplace_back(new receiver_impl<Receiver>{std::move(receiver)});
-    return operation{client_};
-}
+template<class T>
+connect_sender(T*) -> connect_sender<T>;
+} // namespace mqtt5::detail
