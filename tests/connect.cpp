@@ -31,7 +31,7 @@ TEST_CASE("connect: serialize")
     REQUIRE(bytes[6] == 'T');
     REQUIRE(bytes[7] == 'T');
     REQUIRE(bytes[8] == 5);
-    REQUIRE(bytes[9] == 2);
+    REQUIRE(bytes[9] == 0);
     REQUIRE(bytes[10] == 0);
     REQUIRE(bytes[11] == 10);
     REQUIRE(bytes[12] == 5);

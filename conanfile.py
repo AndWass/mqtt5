@@ -14,7 +14,8 @@ class Mqtt5(ConanFile):
         }
     requires = ("span-lite/0.7.0",
         "boost/[>=1.72]",
-        "p0443/0.0.4k"
+        "p0443/0.0.6",
+        "SML/latest"
         )
 
     def requirements(self):

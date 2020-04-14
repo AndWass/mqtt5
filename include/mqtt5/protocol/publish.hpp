@@ -13,6 +13,9 @@
 #include <mqtt5/protocol/string.hpp>
 #include <mqtt5/transport/data_fetcher.hpp>
 
+#include <mqtt5/puback_reason_code.hpp>
+#include <mqtt5/quality_of_service.hpp>
+
 #include <chrono>
 #include <functional>
 #include <iterator>
@@ -143,16 +146,15 @@ public:
         return header_flags & 0x08;
     }
 
-    void set_quality_of_service(std::uint8_t qos) {
-        qos &= 0x03;
-        if (qos == 0) {
+    void set_quality_of_service(mqtt5::quality_of_service qos) {
+        if (qos == quality_of_service::qos0) {
             set_duplicate(false);
         }
-        header_flags = (header_flags & 0x09) + (qos << 1);
+        header_flags = (header_flags & 0x09) + (static_cast<std::uint8_t>(qos) << 1);
     }
 
-    std::uint8_t quality_of_service() const {
-        return ((header_flags >> 1) & 0x03);
+    quality_of_service quality_of_service() const {
+        return static_cast<mqtt5::quality_of_service>((header_flags >> 1) & 0x03);
     }
 
     void set_retain(bool retain) {
@@ -165,7 +167,7 @@ public:
 
     void deserialize(transport::span_byte_data_fetcher_t data) {
         topic = string::deserialize(data);
-        if (quality_of_service() > 0) {
+        if (quality_of_service() != mqtt5::quality_of_service::qos0) {
             packet_identifier = fixed_int<std::uint16_t>::deserialize(data);
         }
         else {
@@ -239,15 +241,10 @@ public:
         }
     };
     std::uint16_t packet_identifier;
-    std::uint8_t reason_code;
+    mqtt5::puback_reason_code reason_code;
     properties_t properties;
 
     static constexpr std::uint8_t type_value = 4;
-
-    static constexpr std::uint8_t success = 0, no_matching_subscribers = 16, unspecified = 128,
-                                  implementation_specific_error = 131, not_authorized = 135,
-                                  topic_name_invalid = 144, packet_identifier_in_use = 145,
-                                  quota_exceeded = 151, payload_format_invalid = 153;
 
     puback() = default;
     template <class T>
@@ -259,10 +256,10 @@ public:
     void deserialize(std::uint32_t remaining_length, transport::data_fetcher<Stream> data) {
         packet_identifier = fixed_int<std::uint16_t>::deserialize(data);
         if (remaining_length > 2) {
-            reason_code = fixed_int<std::uint8_t>::deserialize(data);
+            reason_code = static_cast<puback_reason_code>(fixed_int<std::uint8_t>::deserialize(data));
         }
         else {
-            reason_code = 0;
+            reason_code = puback_reason_code::success;
         }
 
         if (remaining_length >= 4) {
@@ -278,8 +275,8 @@ public:
         fixed_int<std::uint16_t>::serialize(packet_identifier, writer);
         bool serialize_properties =
             !properties.user_property.empty() || !properties.reason_string.empty();
-        if (reason_code || serialize_properties) {
-            fixed_int<std::uint8_t>::serialize(reason_code, writer);
+        if (reason_code != puback_reason_code::success || serialize_properties) {
+            fixed_int<std::uint8_t>::serialize(static_cast<std::uint8_t>(reason_code), writer);
             properties.serialize(writer);
         }
     }

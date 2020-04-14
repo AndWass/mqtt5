@@ -124,6 +124,11 @@ public:
         return std::get_if<T>(&body_) != nullptr;
     }
 
+    template <class T, std::enable_if_t<is_body_type<T>::value> * = nullptr>
+    bool is() const {
+        return std::get_if<T>(&body_) != nullptr;
+    }
+
     body_storage_type &body() {
         return body_;
     }

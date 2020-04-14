@@ -25,6 +25,8 @@ namespace net = boost::asio;
 namespace ip = net::ip;
 using tcp = ip::tcp;
 
+using namespace mqtt5::literals;
+
 struct options
 {
     std::string host;
@@ -51,7 +53,6 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
 
     connect.will_topic = "/mqtt5/lastwill";
     connect.set_will_payload("This is my last will and testament");
-    connect.will_properties.emplace();
 
     co_await p0443_v2::await_sender(connection.control_packet_writer(connect));
 
@@ -62,7 +63,7 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
         std::cout << "Successfully connected to " << opt.host << ":" << opt.port << std::endl;
         std::cout << "Assigned client id = " << connack->properties.assigned_client_id << std::endl;
         mqtt5::protocol::publish publish;
-        publish.set_quality_of_service(1);
+        publish.set_quality_of_service(1_qos);
         publish.packet_identifier = 1;
         publish.topic = "/mqtt5/some_topic";
         publish.set_payload("This is published from mqtt5 using c++ coroutines!");

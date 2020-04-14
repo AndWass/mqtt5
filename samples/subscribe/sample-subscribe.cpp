@@ -21,6 +21,8 @@ namespace net = boost::asio;
 namespace ip = net::ip;
 using tcp = ip::tcp;
 
+using namespace mqtt5::literals;
+
 struct options
 {
     std::string host;
@@ -32,13 +34,22 @@ struct options
     }
 };
 
+template<class Executor, class Stream>
+auto resolve_and_connect(Executor& io, mqtt5::connection<Stream>& connection, const options& opt) {
+    return p0443_v2::then(
+        p0443_v2::asio::resolve(io, opt.host, opt.port),
+        [&connection](auto& resolve_results) {
+            return p0443_v2::asio::connect_socket(connection.next_layer(), resolve_results);
+        }
+    );
+}
+
 p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
     mqtt5::connection<tcp::socket> connection(io);
-
-    auto resolve_result =
-        co_await p0443_v2::await_sender(p0443_v2::asio::resolve(io, opt.host, opt.port));
+    net::io_context::strand strand(io);
     co_await p0443_v2::await_sender(
-        p0443_v2::asio::connect_socket(connection.next_layer(), resolve_result));
+        resolve_and_connect(strand, connection, opt)
+    );
 
     namespace prot = mqtt5::protocol;
 
@@ -78,16 +89,16 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
                         std::cout << "  [Topic = " << publish->topic
                                   << ", QoS = " << (int)publish->quality_of_service() << "]\n";
 
-                        if (publish->quality_of_service() == 1) {
+                        if (publish->quality_of_service() == 1_qos) {
                             prot::puback ack;
                             ack.packet_identifier = publish->packet_identifier;
-                            ack.reason_code = 0;
+                            ack.reason_code = mqtt5::puback_reason_code::success;
 
                             std::cout << "  [PUBACK Packet identifier = " << ack.packet_identifier
                                       << "]\n";
-                            co_await p0443_v2::await_sender(connection.control_packet_writer(ack));
+                            co_await connection.control_packet_writer(ack);
                         }
-                        else if (publish->quality_of_service() == 2) {
+                        else if (publish->quality_of_service() == 2_qos) {
                             std::cout << "  !!Unsupported quality of service\n";
                         }
                     }

@@ -8,6 +8,7 @@
 
 #include <p0443_v2/asio/write_all.hpp>
 #include <p0443_v2/just.hpp>
+#include <p0443_v2/type_traits.hpp>
 #include <p0443_v2/with.hpp>
 
 #include <mqtt5/protocol/control_packet.hpp>
@@ -19,12 +20,36 @@
 
 namespace mqtt5
 {
+namespace detail
+{
+template <class T>
+using lowest_layer_detector = decltype(std::declval<T>().lowest_layer());
+
+template <class T>
+using next_layer_detector = decltype(std::declval<T>().next_layer());
+
+template<class T>
+auto& get_lowest_layer(T& t) {
+    if constexpr(boost::is_detected_v<lowest_layer_detector, T>)
+    {
+        return t.lowest_layer();
+    }
+    else if constexpr(boost::is_detected_v<next_layer_detector, T>)
+    {
+        return mqtt5::detail::get_lowest_layer(t.next_layer());
+    }
+    else {
+        return t;
+    }
+}
+} // namespace detail
 template <class AsyncStream>
 class connection
 {
 private:
     AsyncStream stream_;
     boost::beast::basic_flat_buffer<std::allocator<std::uint8_t>> read_buffer_;
+
 public:
     using next_layer_type = typename std::remove_reference_t<AsyncStream>;
     using executor_type = typename next_layer_type::executor_type;
@@ -38,6 +63,18 @@ public:
     }
     const next_layer_type &next_layer() const {
         return stream_;
+    }
+
+    auto& lowest_layer() {
+        return detail::get_lowest_layer(stream_);
+    }
+
+    const auto& lowest_layer() const {
+        return detail::get_lowest_layer(stream_);
+    }
+
+    executor_type get_executor() {
+        return stream_.get_executor();
     }
 
     auto control_packet_reader() {

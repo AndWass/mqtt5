@@ -12,6 +12,7 @@ target_link_libraries(${PROJECT_NAME} INTERFACE
     CONAN_PKG::span-lite
     CONAN_PKG::boost
     CONAN_PKG::p0443
+    CONAN_PKG::SML
 )
 
 target_include_directories(${PROJECT_NAME} INTERFACE ${CMAKE_CURRENT_LIST_DIR}/include)
@@ -23,3 +24,5 @@ endif()
 if(MQTT5_BUILD_SAMPLES)
     add_subdirectory(samples)
 endif()
+
+
