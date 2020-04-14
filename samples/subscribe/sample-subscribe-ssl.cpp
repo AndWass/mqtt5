@@ -10,14 +10,14 @@
 #include <mqtt5/connection.hpp>
 #include <mqtt5/protocol/control_packet.hpp>
 
-#include <p0443_v2/asio/handshake.hpp>
 #include <p0443_v2/asio/connect.hpp>
+#include <p0443_v2/asio/handshake.hpp>
 #include <p0443_v2/asio/resolve.hpp>
 #include <p0443_v2/await_sender.hpp>
 #include <p0443_v2/immediate_task.hpp>
 
-#include <boost/asio/ssl.hpp>
 #include <boost/asio.hpp>
+#include <boost/asio/ssl.hpp>
 #include <boost/program_options.hpp>
 
 #include <iostream>
@@ -30,6 +30,7 @@ struct options
 {
     std::string host;
     std::string port;
+    std::string ca_file;
     std::vector<std::string> topics;
 
     bool valid() const {
@@ -41,6 +42,9 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
     namespace ssl = boost::asio::ssl;
     ssl::context ctx(ssl::context::sslv23);
     ctx.set_default_verify_paths();
+    if (!opt.ca_file.empty()) {
+        ctx.load_verify_file(opt.ca_file);
+    }
     mqtt5::connection<ssl::stream<tcp::socket>> connection(io, ctx);
     connection.next_layer().set_verify_callback(ssl::rfc2818_verification(opt.host));
     connection.next_layer().set_verify_mode(ssl::verify_peer);
@@ -49,8 +53,7 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
         co_await p0443_v2::await_sender(p0443_v2::asio::resolve(io, opt.host, opt.port));
     co_await p0443_v2::await_sender(p0443_v2::sequence(
         p0443_v2::asio::connect_socket(connection.next_layer().next_layer(), resolve_result),
-        p0443_v2::asio::handshake(connection.next_layer(), ssl::stream<tcp::socket>::client)
-    ));
+        p0443_v2::asio::handshake(connection.next_layer(), ssl::stream<tcp::socket>::client)));
 
     namespace prot = mqtt5::protocol;
 
@@ -71,8 +74,7 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
         }
         co_await p0443_v2::await_sender(connection.control_packet_writer(subscribe));
 
-        auto suback =
-            co_await p0443_v2::await_sender(connection.packet_reader<prot::suback>());
+        auto suback = co_await p0443_v2::await_sender(connection.packet_reader<prot::suback>());
 
         if (suback && suback->packet_identifier == 10) {
             bool valid_codes = std::all_of(suback->reason_codes.begin(), suback->reason_codes.end(),
@@ -122,7 +124,8 @@ options parse_options(int argc, char **argv) {
     desc.add_options()("help,h", "Print help")(
         "host", po::value<std::string>()->default_value("mqtt.eclipse.org"),
         "Broker hostname")("port", po::value<std::string>()->default_value("8883"), "Broker port")(
-        "topic", po::value<std::vector<std::string>>(), "Topics to subscribe to");
+        "topic", po::value<std::vector<std::string>>(), "Topics to subscribe to")(
+        "cafile", po::value<std::string>(), "PEM file with certificates to verify against");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -142,6 +145,9 @@ options parse_options(int argc, char **argv) {
     }
     if (vm.count("topic")) {
         retval.topics = vm["topic"].as<std::vector<std::string>>();
+    }
+    if (vm.count("cafile")) {
+        retval.ca_file = vm["cafile"].as<std::string>();
     }
     if (!retval.valid()) {
         std::cout << desc << "\n";

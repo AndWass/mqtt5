@@ -33,6 +33,7 @@ struct options
     std::string host;
     std::string port;
     std::string url;
+    std::string ca_file;
     std::vector<std::string> topics;
 
     bool valid() const {
@@ -44,6 +45,10 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
     namespace ssl = boost::asio::ssl;
     ssl::context ctx(ssl::context::sslv23);
     ctx.set_default_verify_paths();
+    if (!opt.ca_file.empty()) {
+        ctx.load_verify_file(opt.ca_file);
+    }
+
     using ssl_stream = boost::beast::ssl_stream<boost::beast::tcp_stream>;
     mqtt5::connection<ws::stream<ssl_stream>> connection(
         io, ctx);
@@ -130,11 +135,12 @@ p0443_v2::immediate_task mqtt_task(net::io_context &io, options opt) {
 options parse_options(int argc, char **argv) {
     namespace po = boost::program_options;
     po::options_description desc("Options");
-    desc.add_options()("help,h", "Print help")(
-        "host", po::value<std::string>()->default_value("mqtt.eclipse.org"),
-        "Broker hostname")("port", po::value<std::string>()->default_value("443"), "Broker port")(
-        "topic", po::value<std::vector<std::string>>(), "Topics to subscribe to")(
-        "url", po::value<std::string>()->default_value("/mqtt"), "WebSocket URL endpoint");
+    desc.add_options()("help,h", "Print help")
+        ("host", po::value<std::string>()->default_value("mqtt.eclipse.org"),"Broker hostname")
+        ("port", po::value<std::string>()->default_value("443"), "Broker port")
+        ("topic", po::value<std::vector<std::string>>(), "Topics to subscribe to")
+        ("url", po::value<std::string>()->default_value("/mqtt"), "WebSocket URL endpoint")
+        ("cafile", po::value<std::string>(), "PEM file with certificates to verify against");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -157,6 +163,9 @@ options parse_options(int argc, char **argv) {
     }
     if (vm.count("url")) {
         retval.url = vm["url"].as<std::string>();
+    }
+    if (vm.count("cafile")) {
+        retval.ca_file = vm["cafile"].as<std::string>();
     }
     if (!retval.valid()) {
         std::cout << desc << "\n";
