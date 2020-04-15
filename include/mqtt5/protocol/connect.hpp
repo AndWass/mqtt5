@@ -14,6 +14,7 @@
 #include <iterator>
 #include <optional>
 
+#include <mqtt5/payload_format_indicator.hpp>
 #include <mqtt5/protocol/binary.hpp>
 #include <mqtt5/protocol/fixed_int.hpp>
 #include <mqtt5/protocol/header.hpp>
@@ -153,7 +154,8 @@ struct connect
         std::chrono::duration<std::uint32_t> delay_interval{0};
         std::chrono::duration<std::uint32_t> message_expiry_interval{0};
 
-        std::uint8_t payload_format_indicator{0};
+        mqtt5::payload_format_indicator payload_format_indicator =
+            mqtt5::payload_format_indicator::unspecified;
 
         template <class Stream>
         [[nodiscard]] static will_properties_t deserialize(transport::data_fetcher<Stream> data) {
@@ -179,7 +181,8 @@ struct connect
                         decltype(retval.message_expiry_interval){prop.value_as<std::uint32_t>()};
                 }
                 else if (prop.identifier == property_ids::payload_format_indicator) {
-                    retval.payload_format_indicator = prop.value_as<std::uint8_t>();
+                    retval.payload_format_indicator =
+                        static_cast<mqtt5::payload_format_indicator>(prop.value_as<std::uint8_t>());
                 }
                 else {
                     retval.handle_property(prop);
@@ -201,8 +204,11 @@ struct connect
             using me = will_properties_t;
             maybe_add(&me::content_type, ids::content_type);
             maybe_add(&me::correlation_data, ids::correlation_data);
-            maybe_add(&me::payload_format_indicator, ids::payload_format_indicator);
             maybe_add(&me::response_topic, ids::response_topic);
+            if (payload_format_indicator != dflt.payload_format_indicator) {
+                retval.add_property(ids::payload_format_indicator,
+                                    static_cast<std::uint8_t>(payload_format_indicator));
+            }
             if (delay_interval.count() != 0) {
                 retval.add_property(ids::will_delay_interval, delay_interval.count());
             }

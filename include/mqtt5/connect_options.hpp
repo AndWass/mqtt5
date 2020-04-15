@@ -13,6 +13,8 @@
 #include <iterator>
 
 #include "protocol/string.hpp"
+#include "mqtt5/quality_of_service.hpp"
+#include "mqtt5/payload_format_indicator.hpp"
 
 namespace mqtt5
 {
@@ -38,12 +40,9 @@ struct last_will_t
     std::chrono::duration<std::uint32_t> delay_interval{0};
     std::chrono::duration<std::uint32_t> message_expiry_interval{0};
 
-    std::uint8_t retain:1;
-    std::uint8_t quality_of_service: 2;
-    std::uint8_t payload_format_indicator:1;
-
-
-    last_will_t(): retain(0), quality_of_service(0), payload_format_indicator(0) {}
+    bool retain = false;
+    mqtt5::quality_of_service quality_of_service = 0_qos;
+    mqtt5::payload_format_indicator payload_format_indicator = mqtt5::payload_format_indicator::unspecified;
 };
 struct connect_options
 {

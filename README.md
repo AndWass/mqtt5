@@ -5,9 +5,48 @@ This project depends on [p0443](https://gitlab.com/AndWass/p0443) which is my ex
 
 To implement networking the p0443 project contains a few `p0443_v2::asio` senders that can be used with both regular TCP sockets and with `boost::beast::websocket::stream` streams.
 
-At the moment only some basic MQTT5 frame parsing and serializing is available, but even that allows for some quick prototyping and playing around.
+At the moment only some basic MQTT5 frame parsing and serializing is available, but even that allows for some quick prototyping and playing around. A higher-level client implementation is currently in progress.
 
-## TCP and coroutine sample code
+## Client coroutine sample code
+
+```cpp
+boost::string_view hostname = "mqtt.eclipse.org";
+boost::string_view port = "80";
+
+mqtt5::connect_options opts;
+opts.keep_alive = std::chrono::seconds{60};
+opts.last_will.emplace();
+opts.last_will->topic = "mqtt5/last_will";
+opts.last_will->set_payload("last will from WebSocket client");
+opts.last_will->delay_interval = std::chrono::seconds{10};
+opts.last_will->quality_of_service = 1_qos;
+opts.last_will->content_type = "application/json";
+
+namespace ws = boost::beast::websocket;
+
+mqtt5::client<ws::stream<boost::beast::tcp_stream>> client(io.get_executor());
+client.get_nth_layer<1>().binary(true);
+client.get_nth_layer<1>().set_option(ws::stream_base::decorator([](ws::request_type& request){
+    request.set(boost::beast::http::field::sec_websocket_protocol, "mqtt");
+}));
+
+co_await client.connect_socket(hostname.to_string(), port.to_string());
+co_await p0443_v2::asio::handshake(client.get_nth_layer<1>(), hostname.to_string(), "/mqtt");
+co_await client.handshake(opts);
+
+auto alias_setter = [](mqtt5::protocol::publish& pub) {
+    pub.properties.topic_alias = 1;
+};
+
+auto result = co_await client.publisher("mqtt5/websocket_client", "hello world from WebSocket client!", 1_qos, alias_setter);
+
+std::cout << "Message published with code " << (int)result << "\n";
+result = co_await client.publisher("", "Published using topic alias from WebSocket client!", 1_qos, alias_setter);
+
+co_await p0443_v2::stdcoro::suspend_always{};
+```
+
+## Low layer coroutine sample code
 
 The code below is taken from the complete [subscribe sample](https://gitlab.com/AndWass/mqtt5/-/blob/master/samples/subscribe/sample-subscribe.cpp).
 

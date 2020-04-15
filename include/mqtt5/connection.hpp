@@ -30,13 +30,21 @@ using next_layer_detector = decltype(std::declval<T>().next_layer());
 
 template<class T>
 auto& get_lowest_layer(T& t) {
-    if constexpr(boost::is_detected_v<lowest_layer_detector, T>)
+    /*if constexpr(boost::is_detected_v<lowest_layer_detector, T>)
     {
         return t.lowest_layer();
     }
-    else if constexpr(boost::is_detected_v<next_layer_detector, T>)
+    else */
+    if constexpr(boost::is_detected_v<next_layer_detector, T>)
     {
-        return mqtt5::detail::get_lowest_layer(t.next_layer());
+        using next_layer_t = std::remove_reference_t<decltype(t.next_layer())>;
+        if constexpr(std::is_same_v<next_layer_t, T>)
+        {
+            return t;
+        }
+        else {
+            return mqtt5::detail::get_lowest_layer(t.next_layer());
+        }
     }
     else {
         return t;

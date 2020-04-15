@@ -1,9 +1,9 @@
 #include <mqtt5/topic_filter.hpp>
-#include <string_view>
+
 #include <doctest/doctest.h>
 
 TEST_CASE("topic_filter: from string back to string") {
-    auto check_roundtrip = [](std::string_view sv) {
+    auto check_roundtrip = [](boost::string_view sv) {
         auto filter = mqtt5::topic_filter::from_string(sv);
         REQUIRE(filter.to_string() == std::string(sv));
     };

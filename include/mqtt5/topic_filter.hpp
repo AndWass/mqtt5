@@ -10,7 +10,7 @@
 #include <cassert>
 #include <cmath>
 #include <string>
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 #include <vector>
 
 namespace mqtt5
@@ -20,7 +20,7 @@ class topic_filter
 private:
     std::vector<std::string> levels_;
 
-    bool is_valid_level(const std::string &level, std::string_view rest_of_filter) {
+    bool is_valid_level(const std::string &level, boost::string_view rest_of_filter) {
         /**
          * Multilevel wildcard must be the last level
          * and must not be part of a filter.
@@ -52,7 +52,7 @@ private:
         return true;
     }
 
-    void parse_inplace(std::string_view filter) {
+    void parse_inplace(boost::string_view filter) {
         assert(!filter.empty());
 
         levels_.clear();
@@ -67,7 +67,7 @@ private:
                 }
             }
             else {
-                filter = std::string_view{};
+                filter = boost::string_view{};
             }
             assert(is_valid_level(levels_.back(), filter));
         }
@@ -78,7 +78,7 @@ public:
     topic_filter(const char* topic) {
         parse_inplace(topic);
     }
-    topic_filter(std::string_view topic) {
+    topic_filter(boost::string_view topic) {
         parse_inplace(topic);
     }
     std::string to_string() {
@@ -95,7 +95,7 @@ public:
         }
         return retval;
     }
-    static topic_filter from_string(std::string_view string) {
+    static topic_filter from_string(boost::string_view string) {
         topic_filter retval(string);
         return retval;
     }
@@ -107,11 +107,11 @@ public:
      *
      * The topic name must not contain wildcards
      */
-    bool matches(const std::string &topic_name) const {
+    bool matches(boost::string_view topic_name) const {
         assert(std::find_if(topic_name.begin(), topic_name.end(),
                             [](auto ch) { return ch == '+' || ch == '#'; }) == topic_name.end());
 
-        if(topic_name.starts_with("$") && !levels_.front().starts_with("$")) {
+        if(topic_name.starts_with("$") && levels_.front()[0] != '$') {
             return false;
         }
         auto name_as_filter = from_string(topic_name);
