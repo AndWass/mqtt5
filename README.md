@@ -31,32 +31,34 @@ p0443_v2::immediate_task run_tcp_client(mqtt5::client<tcp::socket>& client)
     co_await client.handshake(opts);
     std::cout << "Handshake complete...\n";
 
+    // A normal publisher can only be used once, either by co_await
+    // or by p0443_v2::connect and start, or submit.
+    co_await client.publisher("mqtt5/hello_world", "Hello world!");
+
     int packet_number = 1;
-    // A reusable publisher can be co_awaited multiple times
-    // to publish message multiple times. The callable will be called
-    // for each message published.
-    auto publisher = client.reusable_publisher("mqtt5/tcp_client", "hello world from TCP client! ", 1_qos, [&packet_number](mqtt5::protocol::publish& pub) {
-        // First publish will establish the topic alias,
-        // all subsequent publishes will use the topic alias
-        // without 
-        pub.properties.topic_alias = 1;
-        if(packet_number > 1) {
-            pub.topic.clear();
-        }
-        auto packet_nr_string = std::to_string(packet_number);
-        // pub.payload will equal "hello world from TCP client! " before the insert.
-        pub.payload.insert(pub.payload.end(), packet_nr_string.begin(), packet_nr_string.end());
-    });
+    // A reusable_publisher can be used multiple times.
+    // The callable only modifies the currently to be sent
+    // message. The "base" message stays the same between usages.
+    auto publisher = client.reusable_publisher(
+        "mqtt5/tcp_client", "hello world from TCP client! ", 1_qos,
+        [&packet_number](mqtt5::protocol::publish &pub) mutable {
+            pub.properties.topic_alias = 1;
+            if (packet_number > 1) {
+                pub.topic.clear();
+            }
+            auto packet_nr_string = std::to_string(packet_number);
+            packet_number++;
+            pub.payload.insert(pub.payload.end(), packet_nr_string.begin(), packet_nr_string.end());
+        });
 
     // Publish
     // "hello world from TCP client! 1"
     // "hello world from TCP client! 2"
     // etc...
-    for(int i=0; i<5; i++)
-    {
+    for (int i = 0; i < 5; i++) {
         co_await publisher;
-        packet_number++;
     }
+    std::cout << "All messages published!\n";
 }
 ```
 
