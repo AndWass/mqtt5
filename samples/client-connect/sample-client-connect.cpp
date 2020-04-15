@@ -40,8 +40,13 @@ p0443_v2::immediate_task run_tcp_client(mqtt5::client<tcp::socket> &client) {
     std::cout << "Socket connected...\n";
     co_await client.handshake(opts);
     std::cout << "Handshake complete...\n";
-    
+
+    // A normal publisher can only be used once, either by co_await
+    // or by p0443_v2::connect and start, or submit.
+    co_await client.publisher("mqtt5/hello_world", "Hello world!");
+
     int packet_number = 1;
+    // A reusable_publisher can be used multiple times.
     auto publisher = client.reusable_publisher(
         "mqtt5/tcp_client", "hello world from TCP client! ", 1_qos,
         [&packet_number](mqtt5::protocol::publish &pub) mutable {
