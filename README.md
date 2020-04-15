@@ -1,6 +1,8 @@
 # MQTT5
 This is a playground project to try out stuff from the upcoming executors proposal with a real-world usecase.
 
+The main repository is found on [GitLab](https://gitlab.com/AndWass/mqtt5) but a [GitHub](https://github.com/AndWass/mqtt5) repository is also available.
+
 This project depends on [p0443](https://gitlab.com/AndWass/p0443) which is my extremely non-conforming and partial implementation of the [P0443R13](http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2020/p0443r13.html) proposal with extra algorithms added.
 
 To implement networking the p0443 project contains a few `p0443_v2::asio` senders that can be used with both regular TCP sockets and with `boost::beast::websocket::stream` streams.
@@ -10,40 +12,52 @@ At the moment only some basic MQTT5 frame parsing and serializing is available, 
 ## Client coroutine sample code
 
 ```cpp
-boost::string_view hostname = "mqtt.eclipse.org";
-boost::string_view port = "80";
+// immediate_task is a coroutine "task"-like that always
+// returns void, but will not be suspended on initial call
+p0443_v2::immediate_task run_tcp_client(mqtt5::client<tcp::socket>& client)
+{
+    mqtt5::connect_options opts;
+    boost::string_view hostname = "mqtt.eclipse.org";
+    boost::string_view port = "1883";
+    opts.keep_alive = std::chrono::minutes{1};
+    opts.last_will.emplace();
+    opts.last_will->topic = "mqtt5/last_will";
+    opts.last_will->set_payload("last will from TCP client");
+    opts.last_will->delay_interval = std::chrono::seconds{10};
+    opts.last_will->quality_of_service = 1_qos;
 
-mqtt5::connect_options opts;
-opts.keep_alive = std::chrono::seconds{60};
-opts.last_will.emplace();
-opts.last_will->topic = "mqtt5/last_will";
-opts.last_will->set_payload("last will from WebSocket client");
-opts.last_will->delay_interval = std::chrono::seconds{10};
-opts.last_will->quality_of_service = 1_qos;
-opts.last_will->content_type = "application/json";
+    co_await client.connect_socket(hostname, port);
+    std::cout << "Socket connected...\n";
+    co_await client.handshake(opts);
+    std::cout << "Handshake complete...\n";
 
-namespace ws = boost::beast::websocket;
+    int packet_number = 1;
+    // A reusable publisher can be co_awaited multiple times
+    // to publish message multiple times. The callable will be called
+    // for each message published.
+    auto publisher = client.reusable_publisher("mqtt5/tcp_client", "hello world from TCP client! ", 1_qos, [&packet_number](mqtt5::protocol::publish& pub) {
+        // First publish will establish the topic alias,
+        // all subsequent publishes will use the topic alias
+        // without 
+        pub.properties.topic_alias = 1;
+        if(packet_number > 1) {
+            pub.topic.clear();
+        }
+        auto packet_nr_string = std::to_string(packet_number);
+        // pub.payload will equal "hello world from TCP client! " before the insert.
+        pub.payload.insert(pub.payload.end(), packet_nr_string.begin(), packet_nr_string.end());
+    });
 
-mqtt5::client<ws::stream<boost::beast::tcp_stream>> client(io.get_executor());
-client.get_nth_layer<1>().binary(true);
-client.get_nth_layer<1>().set_option(ws::stream_base::decorator([](ws::request_type& request){
-    request.set(boost::beast::http::field::sec_websocket_protocol, "mqtt");
-}));
-
-co_await client.connect_socket(hostname.to_string(), port.to_string());
-co_await p0443_v2::asio::handshake(client.get_nth_layer<1>(), hostname.to_string(), "/mqtt");
-co_await client.handshake(opts);
-
-auto alias_setter = [](mqtt5::protocol::publish& pub) {
-    pub.properties.topic_alias = 1;
-};
-
-auto result = co_await client.publisher("mqtt5/websocket_client", "hello world from WebSocket client!", 1_qos, alias_setter);
-
-std::cout << "Message published with code " << (int)result << "\n";
-result = co_await client.publisher("", "Published using topic alias from WebSocket client!", 1_qos, alias_setter);
-
-co_await p0443_v2::stdcoro::suspend_always{};
+    // Publish
+    // "hello world from TCP client! 1"
+    // "hello world from TCP client! 2"
+    // etc...
+    for(int i=0; i<5; i++)
+    {
+        co_await publisher;
+        packet_number++;
+    }
+}
 ```
 
 ## Low layer coroutine sample code
