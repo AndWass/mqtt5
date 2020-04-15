@@ -8,6 +8,7 @@
 #include <boost/beast/websocket/stream_base.hpp>
 #include <chrono>
 #include <mqtt5/client.hpp>
+#include <mqtt5/publish_options.hpp>
 
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
