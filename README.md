@@ -1,9 +1,7 @@
 # MQTT5
 This is a playground project to try out stuff from the upcoming executors proposal with a real-world usecase.
 
-The main repository is found on [GitLab](https://gitlab.com/AndWass/mqtt5) but a [GitHub](https://github.com/AndWass/mqtt5) repository is also available.
-
-This project depends on [p0443](https://gitlab.com/AndWass/p0443) which is my extremely non-conforming and partial implementation of the [P0443R13](http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2020/p0443r13.html) proposal with extra algorithms added.
+This project depends on [p0443](https://github.com/AndWass/p0443) which is my extremely non-conforming and partial implementation of the [P0443R13](http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2020/p0443r13.html) proposal with extra algorithms added.
 
 To implement networking the p0443 project contains a few `p0443_v2::asio` senders that can be used with both regular TCP sockets and with `boost::beast::websocket::stream` streams.
 
@@ -64,29 +62,28 @@ p0443_v2::immediate_task run_tcp_client(mqtt5::client<tcp::socket>& client)
 
 ## Low layer coroutine sample code
 
-The code below is taken from the complete [subscribe sample](https://gitlab.com/AndWass/mqtt5/-/blob/master/samples/subscribe/sample-subscribe.cpp).
+The code below is taken from the complete [subscribe sample](https://github.com/AndWass/mqtt5/blob/master/samples/subscribe/sample-subscribe.cpp).
 
 ```cpp
 // The MQTT5 connection object to work with
 mqtt5::connection<tcp::socket> connection(io);
 
 // Resolve the host and port
-auto resolve_result =
-    co_await p0443_v2::await_sender(p0443_v2::asio::resolve(io, opt.host, opt.port));
+auto resolve_result = co_await p0443_v2::asio::resolve(io, opt.host, opt.port);
 // Connect a socket using the resolve results
-auto connected_ep = co_await p0443_v2::await_sender(
-    p0443_v2::asio::connect_socket(connection.next_layer(), resolve_result));
+auto connected_ep = co_await p0443_v2::asio::connect_socket(
+        connection.next_layer(), resolve_result);
 
 namespace prot = mqtt5::protocol;
 
 // Create a connect packet and send it
 prot::connect connect;
 connect.flags = prot::connect::clean_start_flag;
-co_await p0443_v2::await_sender(connection.control_packet_writer(connect));
+co_await connection.control_packet_writer(connect);
 
 // Wait for CONNACK and read it.
 // body_as returns a std::optional<prot::connack>;
-auto connack = (co_await p0443_v2::await_sender(connection.control_packet_reader()))
+auto connack = (co_await connection.control_packet_reader())
     .body_as<prot::connack>();
 
 if (connack && connack->reason_code == 0) {
@@ -102,10 +99,9 @@ if (connack && connack->reason_code == 0) {
         subscribe.topics.emplace_back(topic, 1);
     }
     // Send the control packet
-    co_await p0443_v2::await_sender(connection.control_packet_writer(subscribe));
+    co_await connection.control_packet_writer(subscribe);
     // Expected response is a suback
-    auto suback =
-        co_await p0443_v2::await_sender(connection.packet_reader<prot::suback>());
+    auto suback = co_await connection.packet_reader<prot::suback>();
 
     if (suback && suback->packet_identifier == 10) {
         // Check that the response codes are all valid.
@@ -115,8 +111,7 @@ if (connack && connack->reason_code == 0) {
             std::cout << "Waiting for published messages'\n";
             // Read published messages and print it, ACK if necessary
             while (true) {
-                if (auto publish = co_await p0443_v2::await_sender(
-                        connection.packet_reader<prot::publish>());
+                if (auto publish = co_await connection.packet_reader<prot::publish>();
                     publish) {
 
                     std::cout << "Received publish\n";
@@ -132,7 +127,7 @@ if (connack && connack->reason_code == 0) {
 
                         std::cout << "  [PUBACK Packet identifier = " << ack.packet_identifier
                                     << "]\n";
-                        co_await p0443_v2::await_sender(connection.control_packet_writer(ack));
+                        co_await connection.control_packet_writer(ack);
                     }
                     else if (publish->quality_of_service() == 2) {
                         std::cout << "  !!Unsupported quality of service\n";
@@ -146,20 +141,18 @@ if (connack && connack->reason_code == 0) {
 
 ### WebSocket
 
-Only a few lines have to be modified to support a WebSocket stream using `boost::beast`. Subscribe examples for [TCP](https://gitlab.com/AndWass/mqtt5/-/blob/master/samples/subscribe/sample-subscribe.cpp)
-and [WebSockets](https://gitlab.com/AndWass/mqtt5/-/blob/master/samples/subscribe/sample-subscribe-ws.cpp) are available.
+Only a few lines have to be modified to support a WebSocket stream using `boost::beast`. [Subscribe examples](https://github.com/AndWass/mqtt5/tree/master/samples/subscribe) for TCP, SSL, WebSocket and Secure WebSockets are available.
 
-The connection setup code for TCP socket is
+As an example; the connection setup code for a TCP socket is
 
 ```cpp
 // The MQTT5 connection object to work with
 mqtt5::connection<tcp::socket> connection(io);
 // Resolve host and port
 auto resolve_result =
-    co_await p0443_v2::await_sender(p0443_v2::asio::resolve(io, opt.host, opt.port));
+    co_await p0443_v2::asio::resolve(io, opt.host, opt.port);
 // Connect the TCP socket
-co_await p0443_v2::await_sender(
-    p0443_v2::asio::connect_socket(connection.next_layer(), resolve_result));
+co_await p0443_v2::asio::connect_socket(connection.next_layer(), resolve_result);
 // Use
 namespace prot = mqtt5::protocol;
 ```
@@ -177,14 +170,13 @@ auto handshake_decorator = [](ws::request_type& req) {
 connection.next_layer().set_option(ws::stream_base::decorator(handshake_decorator));
 
 // Resolve just like before
-auto resolve_result =
-    co_await p0443_v2::await_sender(p0443_v2::asio::resolve(io, opt.host, opt.port));
-// Connect and handshake in a sequence
-co_await p0443_v2::await_sender(
-    p0443_v2::sequence(
+auto resolve_result = co_await p0443_v2::asio::resolve(io, opt.host, opt.port);
+// Connect the TCP socket, then perform WebSocket handshake, done in sequence one after
+// the other.
+co_await p0443_v2::sequence(
         p0443_v2::asio::connect_socket(connection.next_layer().next_layer(), resolve_result),
         p0443_v2::asio::handshake(connection.next_layer(), opt.host, opt.url)
-));
+);
 // From here on the code is exactly the same
 namespace prot = mqtt5::protocol;
 ```
