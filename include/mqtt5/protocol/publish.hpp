@@ -30,7 +30,7 @@ using std::end;
 class publish
 {
 public:
-    struct properties_t: properties_t_base
+    struct properties_t : properties_t_base
     {
         std::string response_topic;
         std::string content_type;
@@ -215,7 +215,7 @@ public:
 class puback
 {
 public:
-    struct properties_t: properties_t_base
+    struct properties_t : properties_t_base
     {
         std::string reason_string;
 
@@ -261,7 +261,8 @@ public:
     void deserialize(std::uint32_t remaining_length, transport::data_fetcher<Stream> data) {
         packet_identifier = fixed_int<std::uint16_t>::deserialize(data);
         if (remaining_length > 2) {
-            reason_code = static_cast<puback_reason_code>(fixed_int<std::uint8_t>::deserialize(data));
+            reason_code =
+                static_cast<puback_reason_code>(fixed_int<std::uint8_t>::deserialize(data));
         }
         else {
             reason_code = puback_reason_code::success;

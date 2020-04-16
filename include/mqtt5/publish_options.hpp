@@ -10,8 +10,8 @@
 #include <tuple>
 
 #include "mqtt5/protocol/publish.hpp"
-#include "quality_of_service.hpp"
 #include "payload_format_indicator.hpp"
+#include "quality_of_service.hpp"
 
 #include <functional>
 
@@ -61,8 +61,8 @@ struct correlation_data
 {
     mqtt5::protocol::binary::type value_;
 
-    template<class...Args>
-    explicit correlation_data(Args&&...args) : value_(std::forward<Args>(args)...) {
+    template <class... Args>
+    explicit correlation_data(Args &&... args) : value_(std::forward<Args>(args)...) {
     }
     void operator()(protocol::publish &publish) const {
         publish.properties.correlation_data = value_;
@@ -101,104 +101,101 @@ struct topic_alias
     }
 };
 
-template<class M>
+template <class M>
 struct late_modifier
 {
     M modifier_;
 
-    late_modifier(M m): modifier_(std::move(m)) {}
+    late_modifier(M m) : modifier_(std::move(m)) {
+    }
 
-    void operator()(protocol::publish& pub) {
+    void operator()(protocol::publish &pub) {
         modifier_(pub);
     }
 };
 
-template<class T>
-struct is_late_modifier: std::false_type {};
+template <class T>
+struct is_late_modifier : std::false_type
+{};
 
-template<class T>
-struct is_late_modifier<late_modifier<T>>: std::true_type {};
+template <class T>
+struct is_late_modifier<late_modifier<T>> : std::true_type
+{};
 
 template <class T>
 using is_publish_option =
     std::disjunction<std::is_same<T, quality_of_service>, std::is_same<T, retain>,
                      std::is_same<T, response_topic>, std::is_same<T, content_type>,
-                     std::is_same<T, topic_alias>,
-                     is_late_modifier<T>
-    >;
+                     std::is_same<T, topic_alias>, is_late_modifier<T>>;
 
 namespace detail
 {
-template<class Options, class LateModifiers>
+template <class Options, class LateModifiers>
 struct options_and_modifiers
 {
     Options options;
     LateModifiers modifiers;
 
     options_and_modifiers() = default;
-    options_and_modifiers(Options opts, LateModifiers modifiers): options(std::move(opts)), modifiers(std::move(modifiers)) {}
+    options_and_modifiers(Options opts, LateModifiers modifiers)
+        : options(std::move(opts)), modifiers(std::move(modifiers)) {
+    }
 };
-template<class OptionsAndModifiers, class Option>
-auto add_one(OptionsAndModifiers&& oam, Option&& opt)
-{
+template <class OptionsAndModifiers, class Option>
+auto add_one(OptionsAndModifiers &&oam, Option &&opt) {
     using option_t = std::decay_t<Option>;
 
-    if constexpr(std::is_same_v<option_t, mqtt5::quality_of_service>)
-    {
+    if constexpr (std::is_same_v<option_t, mqtt5::quality_of_service>) {
         return options_and_modifiers(
-            std::tuple_cat(std::move(oam.options), std::tuple{publish_options::quality_of_service(opt)}),
-            std::move(oam.modifiers)
-        );
+            std::tuple_cat(std::move(oam.options),
+                           std::tuple{publish_options::quality_of_service(opt)}),
+            std::move(oam.modifiers));
     }
-    else if constexpr(std::is_same_v<option_t, mqtt5::payload_format_indicator>)
-    {
+    else if constexpr (std::is_same_v<option_t, mqtt5::payload_format_indicator>) {
         return options_and_modifiers(
-            std::tuple_cat(std::move(oam.options), std::tuple{publish_options::payload_format_indicator(opt)}),
-            std::move(oam.modifiers)
-        );
+            std::tuple_cat(std::move(oam.options),
+                           std::tuple{publish_options::payload_format_indicator(opt)}),
+            std::move(oam.modifiers));
     }
-    else if constexpr(std::is_invocable_v<option_t, mqtt5::protocol::publish&> && !is_publish_option<option_t>::value)
-    {
-        return options_and_modifiers (
+    else if constexpr (std::is_invocable_v<option_t, mqtt5::protocol::publish &> &&
+                       !is_publish_option<option_t>::value) {
+        return options_and_modifiers(
             std::move(oam.options),
-            std::tuple_cat(std::move(oam.modifiers), std::tuple{publish_options::late_modifier{std::move(opt)}})
-        );
+            std::tuple_cat(std::move(oam.modifiers),
+                           std::tuple{publish_options::late_modifier{std::move(opt)}}));
     }
-    else
-    {
+    else {
         return options_and_modifiers(
             std::tuple_cat(std::move(oam.options), std::tuple{std::forward<Option>(opt)}),
-            std::move(oam.modifiers)
-        );
+            std::move(oam.modifiers));
     }
 }
 
-template<class OptionsAndModifiers, class Modifier>
-auto add_one(OptionsAndModifiers&& oam, mqtt5::publish_options::late_modifier<Modifier>&& modifier)
-{
-    return options_and_modifiers (
+template <class OptionsAndModifiers, class Modifier>
+auto add_one(OptionsAndModifiers &&oam,
+             mqtt5::publish_options::late_modifier<Modifier> &&modifier) {
+    return options_and_modifiers(
         std::move(oam.options),
-        std::tuple_cat(std::move(oam.modifiers), std::tuple{std::move(modifier)})
-    );
+        std::tuple_cat(std::move(oam.modifiers), std::tuple{std::move(modifier)}));
 }
 
-template<class OptsModifiers, class Next, class...T>
-auto next_separated(OptsModifiers&& oam, Next&& next, T&&...rest)
-{
-    return mqtt5::publish_options::detail::next_separated(mqtt5::publish_options::detail::add_one(std::move(oam), std::move(next)), std::move(rest)...);
+template <class OptsModifiers, class Next, class... T>
+auto next_separated(OptsModifiers &&oam, Next &&next, T &&... rest) {
+    return mqtt5::publish_options::detail::next_separated(
+        mqtt5::publish_options::detail::add_one(std::move(oam), std::move(next)),
+        std::move(rest)...);
 }
 
-template<class OptsModifiers>
-auto next_separated(OptsModifiers&& oam)
-{
+template <class OptsModifiers>
+auto next_separated(OptsModifiers &&oam) {
     return oam;
 }
 
-template<class...Ts>
-auto separate_options_modifiers(Ts...next) {
+template <class... Ts>
+auto separate_options_modifiers(Ts... next) {
     options_and_modifiers<std::tuple<>, std::tuple<>> base;
     return mqtt5::publish_options::detail::next_separated(std::move(base), std::move(next)...);
 }
-}
+} // namespace detail
 } // namespace publish_options
 } // namespace mqtt5

@@ -17,9 +17,9 @@
 #include "mqtt5/protocol/ping.hpp"
 #include "mqtt5/protocol/publish.hpp"
 #include "mqtt5/puback_reason_code.hpp"
+#include "mqtt5/publish_options.hpp"
 #include "mqtt5/quality_of_service.hpp"
 #include "mqtt5/topic_filter.hpp"
-#include "mqtt5/publish_options.hpp"
 #include "protocol/control_packet.hpp"
 
 #include <boost/asio/executor.hpp>
@@ -158,51 +158,35 @@ public:
         return detail::connect_sender{this};
     }
 
-    template<class Payload, class...Opts>
-    auto publisher(std::string topic, Payload&& payload, Opts&&...opts)
-    {
-        auto opts_and_modifiers = publish_options::detail::separate_options_modifiers(std::forward<Opts>(opts)...);
-        auto late_modifier = [late_mods = std::move(opts_and_modifiers.modifiers)](protocol::publish& pub) mutable {
-            boost::mp11::tuple_for_each(
-                late_mods,
-                [&](auto& mod) {
-                    mod(pub);
-                }
-            );
-        };
+    template <class Payload, class... Opts>
+    auto publisher(std::string topic, Payload &&payload, Opts &&... opts) {
+        auto opts_and_modifiers =
+            publish_options::detail::separate_options_modifiers(std::forward<Opts>(opts)...);
+        auto late_modifier =
+            [late_mods = std::move(opts_and_modifiers.modifiers)](protocol::publish &pub) mutable {
+                boost::mp11::tuple_for_each(late_mods, [&](auto &mod) { mod(pub); });
+            };
         detail::publish_sender pub(this, std::move(late_modifier));
         pub.message_.topic = std::move(topic);
         pub.message_.set_payload(std::forward<Payload>(payload));
-        boost::mp11::tuple_for_each(
-            opts_and_modifiers.options,
-            [&](auto& opt) {
-                opt(pub.message_);
-            }
-        );
+        boost::mp11::tuple_for_each(opts_and_modifiers.options,
+                                    [&](auto &opt) { opt(pub.message_); });
         return pub;
     }
 
-    template<class Payload, class...Opts>
-    auto reusable_publisher(std::string topic, Payload&& payload, Opts&&...opts)
-    {
-        auto opts_and_modifiers = publish_options::detail::separate_options_modifiers(std::forward<Opts>(opts)...);
-        auto late_modifier = [late_mods = std::move(opts_and_modifiers.modifiers)](protocol::publish& pub) mutable {
-            boost::mp11::tuple_for_each(
-                late_mods,
-                [&](auto& mod) {
-                    mod(pub);
-                }
-            );
-        };
+    template <class Payload, class... Opts>
+    auto reusable_publisher(std::string topic, Payload &&payload, Opts &&... opts) {
+        auto opts_and_modifiers =
+            publish_options::detail::separate_options_modifiers(std::forward<Opts>(opts)...);
+        auto late_modifier =
+            [late_mods = std::move(opts_and_modifiers.modifiers)](protocol::publish &pub) mutable {
+                boost::mp11::tuple_for_each(late_mods, [&](auto &mod) { mod(pub); });
+            };
         detail::reusable_publish_sender pub(this, std::move(late_modifier));
         pub.message_.topic = std::move(topic);
         pub.message_.set_payload(std::forward<Payload>(payload));
-        boost::mp11::tuple_for_each(
-            opts_and_modifiers.options,
-            [&](auto& opt) {
-                opt(pub.message_);
-            }
-        );
+        boost::mp11::tuple_for_each(opts_and_modifiers.options,
+                                    [&](auto &opt) { opt(pub.message_); });
         return pub;
     }
 
@@ -298,13 +282,9 @@ struct client<Stream>::connection_sm_t
             client_->start_connect_timer();
             client_->send_connect();
         };
-        auto close_socket = [this] {
-            client_->close();
-        };
+        auto close_socket = [this] { client_->close(); };
 
-        auto start_receiving = [this] {
-            client_->receive_one_message();
-        };
+        auto start_receiving = [this] { client_->receive_one_message(); };
 
         auto is_connack = [](packet_received_evt evt) {
             return evt.packet->template is<protocol::connack>();
@@ -381,20 +361,17 @@ client<Stream>::client(const net::executor &executor, Args &&... args)
       connection_sm_(new boost::sml::sm<connection_sm_t>(connection_sm_t{this})) {
 }
 
-template<class Stream>
-void client<Stream>::close()
-{
-    try
-    {
+template <class Stream>
+void client<Stream>::close() {
+    try {
         connection_.lowest_layer().cancel();
     }
-    catch(std::exception&) {
+    catch (std::exception &) {
     }
-    try
-    {
+    try {
         connection_.lowest_layer().close();
     }
-    catch(std::exception&) {
+    catch (std::exception &) {
     }
 }
 

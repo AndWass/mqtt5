@@ -45,7 +45,8 @@ p0443_v2::immediate_task run_tcp_client(mqtt5::client<tcp::socket> &client) {
     namespace pubopt = mqtt5::publish_options;
     // A normal publisher can only be used once, either by co_await
     // or by p0443_v2::connect and start, or submit.
-    co_await client.publisher("mqtt5/hello_world", "Hello world!", 1_qos,  mqtt5::payload_format_indicator::utf8);
+    co_await client.publisher("mqtt5/hello_world", "Hello world!", 1_qos,
+                              mqtt5::payload_format_indicator::utf8);
 
     int packet_number = 1;
     // A reusable_publisher can be used multiple times.
