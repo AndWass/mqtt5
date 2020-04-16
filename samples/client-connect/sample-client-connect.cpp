@@ -36,9 +36,9 @@ p0443_v2::immediate_task run_tcp_client(mqtt5::client<tcp::socket> &client) {
     opts.last_will->quality_of_service = 1_qos;
     opts.last_will->content_type = "application/json";
 
-    co_await client.connect_socket(hostname, port);
+    co_await client.socket_connector(hostname, port);
     std::cout << "Socket connected...\n";
-    co_await client.handshake(opts);
+    co_await client.handshaker(opts);
     std::cout << "Handshake complete...\n";
 
     // A normal publisher can only be used once, either by co_await
@@ -83,9 +83,9 @@ run_websocket_client(mqtt5::client<ws::stream<boost::beast::tcp_stream>> &client
         request.set(boost::beast::http::field::sec_websocket_protocol, "mqtt");
     }));
 
-    co_await client.connect_socket(hostname, port);
+    co_await client.socket_connector(hostname, port);
     co_await p0443_v2::asio::handshake(client.get_nth_layer<1>(), hostname, "/mqtt");
-    co_await client.handshake(opts);
+    co_await client.handshaker(opts);
 
     auto alias_setter = [](mqtt5::protocol::publish &pub) { pub.properties.topic_alias = 1; };
 

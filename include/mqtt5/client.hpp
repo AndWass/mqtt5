@@ -143,14 +143,14 @@ public:
         return connection_.get_executor();
     }
 
-    auto connect_socket(boost::string_view host, boost::string_view port);
+    auto socket_connector(boost::string_view host, boost::string_view port);
 
     template <int N>
     auto &get_nth_layer() {
         return get_nth_layer_impl<N>(connection_);
     }
 
-    auto handshake(connect_options opts) {
+    auto handshaker(connect_options opts) {
         connect_opts_ = std::move(opts);
         return detail::connect_sender{this};
     }
@@ -396,7 +396,7 @@ void client<Stream>::close()
 }
 
 template <class Stream>
-auto client<Stream>::connect_socket(boost::string_view host, boost::string_view port) {
+auto client<Stream>::socket_connector(boost::string_view host, boost::string_view port) {
     return p0443_v2::transform(
         p0443_v2::then(p0443_v2::asio::resolve(executor_, host.to_string(), port.to_string()),
                        [this](auto results) {
