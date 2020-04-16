@@ -24,9 +24,9 @@ p0443_v2::immediate_task run_tcp_client(mqtt5::client<tcp::socket>& client)
     opts.last_will->delay_interval = std::chrono::seconds{10};
     opts.last_will->quality_of_service = 1_qos;
 
-    co_await client.connect_socket(hostname, port);
+    co_await client.socket_connector(hostname, port);
     std::cout << "Socket connected...\n";
-    co_await client.handshake(opts);
+    co_await client.handshaker(opts);
     std::cout << "Handshake complete...\n";
 
     // A normal publisher can only be used once, either by co_await
