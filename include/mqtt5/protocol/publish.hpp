@@ -13,6 +13,7 @@
 #include <mqtt5/protocol/string.hpp>
 #include <mqtt5/transport/data_fetcher.hpp>
 
+#include <mqtt5/payload_format_indicator.hpp>
 #include <mqtt5/puback_reason_code.hpp>
 #include <mqtt5/quality_of_service.hpp>
 
@@ -29,7 +30,7 @@ using std::end;
 class publish
 {
 public:
-    struct properties_t: properties_t_base
+    struct properties_t : properties_t_base
     {
         std::string response_topic;
         std::string content_type;
@@ -40,7 +41,8 @@ public:
         std::chrono::duration<std::uint32_t> message_expiry_interval{0};
 
         std::uint16_t topic_alias{0};
-        std::uint8_t payload_format_indicator{0};
+        mqtt5::payload_format_indicator payload_format_indicator{
+            mqtt5::payload_format_indicator::unspecified};
 
         template <class Stream>
         [[nodiscard]] static properties_t deserialize(transport::data_fetcher<Stream> data) {
@@ -72,7 +74,8 @@ public:
                     set_value(retval.topic_alias, prop);
                 }
                 else if (prop.identifier == ids::payload_format_indicator) {
-                    set_value(retval.payload_format_indicator, prop);
+                    retval.payload_format_indicator =
+                        static_cast<mqtt5::payload_format_indicator>(prop.value_as<std::uint8_t>());
                 }
                 else {
                     retval.handle_property(prop);
@@ -103,7 +106,9 @@ public:
                 props.add_property(ids::message_expiry_interval, message_expiry_interval.count());
             }
             maybe_add(&properties_t::topic_alias, ids::topic_alias);
-            maybe_add(&properties_t::payload_format_indicator, ids::payload_format_indicator);
+            if(payload_format_indicator != dflt.payload_format_indicator) {
+                props.add_property(ids::payload_format_indicator, static_cast<std::uint8_t>(payload_format_indicator));
+            }
             this->add_base_properties(props);
 
             props.serialize(writer);
@@ -210,7 +215,7 @@ public:
 class puback
 {
 public:
-    struct properties_t: properties_t_base
+    struct properties_t : properties_t_base
     {
         std::string reason_string;
 
@@ -256,7 +261,8 @@ public:
     void deserialize(std::uint32_t remaining_length, transport::data_fetcher<Stream> data) {
         packet_identifier = fixed_int<std::uint16_t>::deserialize(data);
         if (remaining_length > 2) {
-            reason_code = static_cast<puback_reason_code>(fixed_int<std::uint8_t>::deserialize(data));
+            reason_code =
+                static_cast<puback_reason_code>(fixed_int<std::uint8_t>::deserialize(data));
         }
         else {
             reason_code = puback_reason_code::success;

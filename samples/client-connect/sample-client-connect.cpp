@@ -8,6 +8,7 @@
 #include <boost/beast/websocket/stream_base.hpp>
 #include <chrono>
 #include <mqtt5/client.hpp>
+#include <mqtt5/publish_options.hpp>
 
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
@@ -41,16 +42,17 @@ p0443_v2::immediate_task run_tcp_client(mqtt5::client<tcp::socket> &client) {
     co_await client.handshaker(opts);
     std::cout << "Handshake complete...\n";
 
+    namespace pubopt = mqtt5::publish_options;
     // A normal publisher can only be used once, either by co_await
     // or by p0443_v2::connect and start, or submit.
-    co_await client.publisher("mqtt5/hello_world", "Hello world!");
+    co_await client.publisher("mqtt5/hello_world", "Hello world!", 1_qos,
+                              mqtt5::payload_format_indicator::utf8);
 
     int packet_number = 1;
     // A reusable_publisher can be used multiple times.
     auto publisher = client.reusable_publisher(
-        "mqtt5/tcp_client", "hello world from TCP client! ", 1_qos,
+        "mqtt5/tcp_client", "hello world from TCP client! ", 1_qos, pubopt::topic_alias(1),
         [&packet_number](mqtt5::protocol::publish &pub) mutable {
-            pub.properties.topic_alias = 1;
             if (packet_number > 1) {
                 pub.topic.clear();
             }
@@ -62,6 +64,7 @@ p0443_v2::immediate_task run_tcp_client(mqtt5::client<tcp::socket> &client) {
     for (int i = 0; i < 5; i++) {
         co_await publisher;
     }
+
     std::cout << "All messages published!\n";
 }
 
@@ -87,14 +90,15 @@ run_websocket_client(mqtt5::client<ws::stream<boost::beast::tcp_stream>> &client
     co_await p0443_v2::asio::handshake(client.get_nth_layer<1>(), hostname, "/mqtt");
     co_await client.handshaker(opts);
 
-    auto alias_setter = [](mqtt5::protocol::publish &pub) { pub.properties.topic_alias = 1; };
+    namespace pubopt = mqtt5::publish_options;
 
     auto result = co_await client.publisher(
-        "mqtt5/websocket_client", "hello world from WebSocket client!", 1_qos, alias_setter);
+        "mqtt5/websocket_client", "hello world from WebSocket client!", 1_qos,
+        pubopt::topic_alias(1), mqtt5::payload_format_indicator::utf8);
 
     std::cout << "Message published with code " << (int)result << "\n";
-    result = co_await client.publisher("", "Published using topic alias from WebSocket client!",
-                                       1_qos, alias_setter);
+    co_await client.publisher("", "Published using topic alias from WebSocket client!", 1_qos,
+                              pubopt::topic_alias(1));
 }
 
 int main() {

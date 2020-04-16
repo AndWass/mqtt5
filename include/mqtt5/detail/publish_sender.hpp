@@ -36,11 +36,9 @@ struct publish_sender
 
     static constexpr bool sends_done = true;
 
-    std::vector<std::uint8_t> payload;
-    std::string topic_;
+    protocol::publish message_;
     Modifier modifying_function_;
     Client *client_;
-    quality_of_service qos_ = 0_qos;
 
     publish_sender(Client *client, Modifier modifier)
         : modifying_function_(std::move(modifier)), client_(client) {
@@ -51,11 +49,9 @@ struct publish_sender
     {
         Receiver receiver_;
 
-        std::string topic_;
-        std::vector<std::uint8_t> payload;
+        protocol::publish message_;
         Modifier modifying_function_;
         Client *client_;
-        quality_of_service qos_;
 
         struct publish_receiver : publish_receiver_base
         {
@@ -78,21 +74,17 @@ struct publish_sender
         };
 
         void start() {
-            protocol::publish publish;
-            publish.topic = std::move(topic_);
-            publish.payload = std::move(payload);
-            publish.set_quality_of_service(qos_);
-            modifying_function_(publish);
+            modifying_function_(message_);
 
-            if (publish.quality_of_service() != 0_qos) {
-                publish.packet_identifier = client_->next_packet_identifier();
+            if (message_.quality_of_service() != 0_qos) {
+                message_.packet_identifier = client_->next_packet_identifier();
             }
 
-            client_->send_message(publish);
+            client_->send_message(message_);
 
-            if (publish.quality_of_service() != 0_qos) {
+            if (message_.quality_of_service() != 0_qos) {
                 // Store message for further processing
-                in_flight_publish stored{std::move(publish),
+                in_flight_publish stored{std::move(message_),
                                          std::make_unique<publish_receiver>(std::move(receiver_))};
 
                 client_->published_messages_.emplace_back(std::move(stored));
@@ -106,7 +98,7 @@ struct publish_sender
     template <class Receiver>
     auto connect(Receiver &&receiver) {
         return operation<p0443_v2::remove_cvref_t<Receiver>>{
-            std::forward<Receiver>(receiver), topic_, payload, modifying_function_, client_, qos_};
+            std::forward<Receiver>(receiver), std::move(message_), modifying_function_, client_};
     }
 };
 
@@ -121,11 +113,9 @@ struct reusable_publish_sender
 
     static constexpr bool sends_done = true;
 
-    std::vector<std::uint8_t> payload;
-    std::string topic_;
+    protocol::publish message_;
     Modifier modifying_function_;
     Client *client_;
-    quality_of_service qos_ = 0_qos;
 
     reusable_publish_sender(Client *client, Modifier modifier)
         : modifying_function_(std::move(modifier)), client_(client) {
@@ -148,11 +138,9 @@ struct reusable_publish_sender
     {
         Receiver receiver_;
 
-        std::string topic_;
-        std::vector<std::uint8_t> payload;
+        protocol::publish message_;
         Modifier modifying_function_;
         Client *client_;
-        quality_of_service qos_;
 
         struct publish_receiver : publish_receiver_base
         {
@@ -175,21 +163,17 @@ struct reusable_publish_sender
         };
 
         void start() {
-            protocol::publish publish;
-            publish.topic = std::move(topic_);
-            publish.payload = std::move(payload);
-            publish.set_quality_of_service(qos_);
-            modifying_function_(publish);
+            modifying_function_(message_);
 
-            if (publish.quality_of_service() != 0_qos) {
-                publish.packet_identifier = client_->next_packet_identifier();
+            if (message_.quality_of_service() != 0_qos) {
+                message_.packet_identifier = client_->next_packet_identifier();
             }
 
-            client_->send_message(publish);
+            client_->send_message(message_);
 
-            if (publish.quality_of_service() != 0_qos) {
+            if (message_.quality_of_service() != 0_qos) {
                 // Store message for further processing
-                in_flight_publish stored{std::move(publish),
+                in_flight_publish stored{std::move(message_),
                                          std::make_unique<publish_receiver>(std::move(receiver_))};
 
                 client_->published_messages_.emplace_back(std::move(stored));
@@ -203,7 +187,7 @@ struct reusable_publish_sender
     template <class Receiver>
     auto connect(Receiver &&receiver) {
         return operation<p0443_v2::remove_cvref_t<Receiver>>{
-            std::forward<Receiver>(receiver), topic_, payload, modifying_function_, client_, qos_};
+            std::forward<Receiver>(receiver), message_, modifying_function_, client_};
     }
 };
 } // namespace mqtt5::detail
