@@ -210,6 +210,11 @@ public:
         retval.subscriptions_ = std::move(subs);
         return retval;
     }
+
+    auto subscriber(std::vector<mqtt5::single_subscription> subs) {
+        return subscriber(std::move(subs), [](auto&) {});
+    }
+
     auto subscriber(topic_filter topic, mqtt5::quality_of_service qos) {
         single_subscription single_sub;
         single_sub.topic = topic;
