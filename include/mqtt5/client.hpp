@@ -19,6 +19,7 @@
 #include "mqtt5/puback_reason_code.hpp"
 #include "mqtt5/quality_of_service.hpp"
 #include "mqtt5/topic_filter.hpp"
+#include "mqtt5/publish_options.hpp"
 #include "protocol/control_packet.hpp"
 
 #include <boost/asio/executor.hpp>
@@ -33,6 +34,8 @@
 
 #include <boost/asio/steady_timer.hpp>
 #include <p0443_v2/type_traits.hpp>
+
+#include <boost/mp11/tuple.hpp>
 
 namespace mqtt5
 {
@@ -155,52 +158,52 @@ public:
         return detail::connect_sender{this};
     }
 
-    template <class Payload, class Modifier>
-    auto publisher(std::string topic, Payload &&payload, quality_of_service qos,
-                   Modifier &&modifier) {
-        using modifier_t = p0443_v2::remove_cvref_t<Modifier>;
-        using payload_t = p0443_v2::remove_cvref_t<Payload>;
-        detail::publish_sender pub(this, std::forward<Modifier>(modifier));
-        pub.topic_ = std::move(topic);
-        if constexpr (std::is_same_v<payload_t, std::vector<std::uint8_t>>) {
-            pub.payload = std::forward<Payload>(payload);
-        }
-        else {
-            using std::begin;
-            using std::end;
-            std::copy(begin(payload), end(payload), std::back_inserter(pub.payload));
-        }
-        pub.qos_ = qos;
+    template<class Payload, class...Opts>
+    auto publisher(std::string topic, Payload&& payload, Opts&&...opts)
+    {
+        auto opts_and_modifiers = publish_options::detail::separate_options_modifiers(std::forward<Opts>(opts)...);
+        auto late_modifier = [late_mods = std::move(opts_and_modifiers.modifiers)](protocol::publish& pub) mutable {
+            boost::mp11::tuple_for_each(
+                late_mods,
+                [&](auto& mod) {
+                    mod(pub);
+                }
+            );
+        };
+        detail::publish_sender pub(this, std::move(late_modifier));
+        pub.message_.topic = std::move(topic);
+        pub.message_.set_payload(std::forward<Payload>(payload));
+        boost::mp11::tuple_for_each(
+            opts_and_modifiers.options,
+            [&](auto& opt) {
+                opt(pub.message_);
+            }
+        );
         return pub;
     }
 
-    auto publisher(const std::string &topic, const std::string &message,
-                   quality_of_service qos = 0_qos) {
-        return publisher(topic, message, qos, [](auto &) {});
-    }
-
-    template <class Payload, class Modifier>
-    auto reusable_publisher(std::string topic, Payload &&payload, quality_of_service qos,
-                            Modifier &&modifier) {
-        using modifier_t = p0443_v2::remove_cvref_t<Modifier>;
-        using payload_t = p0443_v2::remove_cvref_t<Payload>;
-        detail::reusable_publish_sender pub(this, std::forward<Modifier>(modifier));
-        pub.topic_ = std::move(topic);
-        if constexpr (std::is_same_v<payload_t, std::vector<std::uint8_t>>) {
-            pub.payload = std::forward<Payload>(payload);
-        }
-        else {
-            using std::begin;
-            using std::end;
-            std::copy(begin(payload), end(payload), std::back_inserter(pub.payload));
-        }
-        pub.qos_ = qos;
+    template<class Payload, class...Opts>
+    auto reusable_publisher(std::string topic, Payload&& payload, Opts&&...opts)
+    {
+        auto opts_and_modifiers = publish_options::detail::separate_options_modifiers(std::forward<Opts>(opts)...);
+        auto late_modifier = [late_mods = std::move(opts_and_modifiers.modifiers)](protocol::publish& pub) mutable {
+            boost::mp11::tuple_for_each(
+                late_mods,
+                [&](auto& mod) {
+                    mod(pub);
+                }
+            );
+        };
+        detail::reusable_publish_sender pub(this, std::move(late_modifier));
+        pub.message_.topic = std::move(topic);
+        pub.message_.set_payload(std::forward<Payload>(payload));
+        boost::mp11::tuple_for_each(
+            opts_and_modifiers.options,
+            [&](auto& opt) {
+                opt(pub.message_);
+            }
+        );
         return pub;
-    }
-
-    auto reusable_publisher(const std::string &topic, const std::string &message,
-                            quality_of_service qos = 0_qos) {
-        return reusable_publisher(topic, message, qos, [](auto &) {});
     }
 
     template <class Modifier>
