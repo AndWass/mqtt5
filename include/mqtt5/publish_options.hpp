@@ -179,16 +179,16 @@ auto add_one(OptionsAndModifiers &&oam,
         std::tuple_cat(std::move(oam.modifiers), std::tuple{std::move(modifier)}));
 }
 
+template <class OptsModifiers>
+auto next_separated(OptsModifiers &&oam) {
+    return oam;
+}
+
 template <class OptsModifiers, class Next, class... T>
 auto next_separated(OptsModifiers &&oam, Next &&next, T &&... rest) {
     return mqtt5::publish_options::detail::next_separated(
         mqtt5::publish_options::detail::add_one(std::move(oam), std::move(next)),
         std::move(rest)...);
-}
-
-template <class OptsModifiers>
-auto next_separated(OptsModifiers &&oam) {
-    return oam;
 }
 
 template <class... Ts>
