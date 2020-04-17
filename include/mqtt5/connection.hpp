@@ -30,11 +30,6 @@ using next_layer_detector = decltype(std::declval<T>().next_layer());
 
 template<class T>
 auto& get_lowest_layer(T& t) {
-    /*if constexpr(boost::is_detected_v<lowest_layer_detector, T>)
-    {
-        return t.lowest_layer();
-    }
-    else */
     if constexpr(boost::is_detected_v<next_layer_detector, T>)
     {
         using next_layer_t = std::remove_reference_t<decltype(t.next_layer())>;
