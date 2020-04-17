@@ -86,7 +86,7 @@ private:
     friend struct detail::connect_sender;
 
     net::executor executor_;
-    std::vector<std::unique_ptr<detail::connect_sender_receiver_base>> connect_receivers_;
+    std::vector<std::unique_ptr<detail::message_receiver_base<>>> connect_receivers_;
     connection<Stream> connection_;
     net::steady_timer connect_and_ping_timer_;
     net::steady_timer keep_alive_timer_;

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <mqtt5/protocol/unsubscribe.hpp>
+#include "message_receiver_base.hpp"
 
 #include <p0443_v2/type_traits.hpp>
 
@@ -14,19 +15,10 @@
 
 namespace mqtt5::detail
 {
-struct unsubscribe_receiver_base
-{
-    virtual void set_value(std::vector<std::uint8_t> codes) = 0;
-    virtual void set_done() = 0;
-    virtual void set_error(std::exception_ptr e) = 0;
-
-    virtual ~unsubscribe_receiver_base() = default;
-};
-
 struct in_flight_unsubscribe
 {
     mqtt5::protocol::unsubscribe message_;
-    std::unique_ptr<unsubscribe_receiver_base> receiver_;
+    std::unique_ptr<message_receiver_base<std::vector<std::uint8_t>>> receiver_;
 };
 
 template<class Client>
@@ -50,7 +42,7 @@ struct unsubscribe_sender
         Client* client_;
         Receiver receiver_;
 
-        struct receiver: unsubscribe_receiver_base
+        struct receiver: message_receiver_base<std::vector<std::uint8_t>>
         {
             Receiver next_;
             receiver(Receiver &&next) : next_(std::move(next)) {
