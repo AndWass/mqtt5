@@ -11,6 +11,7 @@
 #include "detail/event_emitting_receiver.hpp"
 #include "detail/publish_sender.hpp"
 #include "detail/subscribe_sender.hpp"
+#include "detail/unsubscribe_sender.hpp"
 
 #include "mqtt5/connect_options.hpp"
 #include "mqtt5/protocol/connect.hpp"
@@ -75,6 +76,8 @@ private:
     friend struct detail::publish_sender;
     template <class, class>
     friend struct detail::subscribe_sender;
+    template <class>
+    friend struct detail::unsubscribe_sender;
 
     template <class, class>
     friend struct detail::reusable_publish_sender;
@@ -94,6 +97,7 @@ private:
     std::string client_id_;
     std::vector<detail::in_flight_publish> published_messages_;
     std::vector<detail::in_flight_subscribe> subscribe_messages_;
+    std::vector<detail::in_flight_unsubscribe> unsubscribe_messages_;
 
     struct connection_sm_t;
 
@@ -113,6 +117,7 @@ private:
     void handle_connack(protocol::connack &connack);
     void handle_puback(protocol::puback &puback);
     void handle_suback(protocol::suback &suback);
+    void handle_unsuback(protocol::unsuback &unsuback);
     void notify_connector_receivers(const bool success) {
         auto recvs = std::move(connect_receivers_);
         connect_receivers_.clear();
@@ -209,6 +214,12 @@ public:
         return subscriber({single_sub}, [](auto &) {});
     }
 
+    auto unsubscriber(std::vector<std::string> topics) {
+        auto retval = detail::unsubscribe_sender<client>{this};
+        retval.unsub.topics = std::move(topics);
+        return retval;
+    }
+
     bool is_connected();
     bool is_handshaking();
 
@@ -303,6 +314,10 @@ struct client<Stream>::connection_sm_t
             return evt.packet->template is<protocol::suback>();
         };
 
+        auto is_unsuback = [](packet_received_evt evt) {
+            return evt.packet->template is<protocol::unsuback>();
+        };
+
         auto connection_established = [this](packet_received_evt connack) {
             client_->handle_connack(*connack.packet->template body_as<protocol::connack>());
         };
@@ -313,6 +328,10 @@ struct client<Stream>::connection_sm_t
 
         auto handle_suback = [this](packet_received_evt suback) {
             client_->handle_suback(*suback.packet->template body_as<protocol::suback>());
+        };
+
+        auto handle_unsuback = [this](packet_received_evt suback) {
+            client_->handle_unsuback(*suback.packet->template body_as<protocol::unsuback>());
         };
 
         auto start_ping_timer = [this] { client_->start_ping_timer(); };
@@ -338,6 +357,7 @@ struct client<Stream>::connection_sm_t
 
             connected + sml::event<packet_received_evt>[is_puback] / handle_puback = connected,
             connected + sml::event<packet_received_evt>[is_suback] / handle_suback = connected,
+            connected + sml::event<packet_received_evt>[is_unsuback] / handle_unsuback = connected,
 
             *rx_idle + sml::event<handshake_evt> / start_receiving = rx_receiving,
             rx_receiving + sml::event<packet_received_evt> / start_receiving = rx_receiving,
@@ -459,6 +479,19 @@ void client<Stream>::handle_suback(protocol::suback &suback) {
             result.codes.push_back(static_cast<subscribe_result::result_code>(c));
         }
         to_finish.receiver_->set_value(std::move(result));
+    }
+}
+
+template<class Stream>
+void client<Stream>::handle_unsuback(protocol::unsuback &unsuback) {
+    auto iter = std::find_if(unsubscribe_messages_.begin(), unsubscribe_messages_.end(), [&](auto &msg)
+    {
+        return unsuback.packet_identifier == msg.message_.packet_identifier;
+    });
+    if(iter != unsubscribe_messages_.end()) {
+        detail::in_flight_unsubscribe to_finish = std::move(*iter);
+        unsubscribe_messages_.erase(iter);
+        to_finish.receiver_->set_value(std::move(unsuback.reason_codes));
     }
 }
 
