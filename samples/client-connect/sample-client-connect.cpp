@@ -42,6 +42,11 @@ p0443_v2::immediate_task run_tcp_client(mqtt5::client<tcp::socket> &client) {
     co_await client.handshaker(opts);
     std::cout << "Handshake complete...\n";
 
+    auto subres = co_await client.subscriber("mqtt5/+", 1_qos);
+    std::cout << "Subscribed with result code " << (int)subres.codes.front() << "\n";
+    auto unsubres = co_await client.unsubscriber({"mqtt5/+", "hello"});
+    std::cout << "Unsubscribed with result code " << (int)unsubres.front() << "\n";
+
     namespace pubopt = mqtt5::publish_options;
     // A normal publisher can only be used once, either by co_await
     // or by p0443_v2::connect and start, or submit.
