@@ -14,6 +14,8 @@
 #include <p0443_v2/type_traits.hpp>
 #include <vector>
 
+#include "message_receiver_base.hpp"
+
 namespace mqtt5
 {
 enum class subscription_retain_handling {
@@ -51,19 +53,10 @@ struct subscribe_result
 };
 namespace detail
 {
-struct subscribe_receiver_base
-{
-    virtual void set_value(subscribe_result results) = 0;
-    virtual void set_done() = 0;
-    virtual void set_error(std::exception_ptr e) = 0;
-
-    virtual ~subscribe_receiver_base() = default;
-};
-
 struct in_flight_subscribe
 {
     protocol::subscribe message_;
-    std::unique_ptr<subscribe_receiver_base> receiver_;
+    std::unique_ptr<message_receiver_base<subscribe_result>> receiver_;
 };
 
 template <class Client, class Modifier>
@@ -89,7 +82,7 @@ struct subscribe_sender
         Modifier modifier_;
         std::vector<single_subscription> subscriptions_;
 
-        struct receiver : subscribe_receiver_base
+        struct receiver : message_receiver_base<subscribe_result>
         {
             Receiver next_;
             receiver(Receiver &&next) : next_(std::move(next)) {

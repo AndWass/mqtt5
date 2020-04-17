@@ -9,20 +9,14 @@
 #include "mqtt5/quality_of_service.hpp"
 #include <mqtt5/protocol/publish.hpp>
 
+#include "message_receiver_base.hpp"
+
 namespace mqtt5::detail
 {
-struct publish_receiver_base
-{
-    virtual void set_value(mqtt5::puback_reason_code code) = 0;
-    virtual void set_done() = 0;
-    virtual void set_error(std::exception_ptr e) = 0;
-
-    virtual ~publish_receiver_base() = default;
-};
 struct in_flight_publish
 {
     protocol::publish message_;
-    std::unique_ptr<publish_receiver_base> receiver_;
+    std::unique_ptr<detail::message_receiver_base<mqtt5::puback_reason_code>> receiver_;
 };
 
 template <class Client, class Modifier>
@@ -53,7 +47,7 @@ struct publish_sender
         Modifier modifying_function_;
         Client *client_;
 
-        struct publish_receiver : publish_receiver_base
+        struct publish_receiver : detail::message_receiver_base<mqtt5::puback_reason_code>
         {
             Receiver next_;
 
@@ -142,7 +136,7 @@ struct reusable_publish_sender
         Modifier modifying_function_;
         Client *client_;
 
-        struct publish_receiver : publish_receiver_base
+        struct publish_receiver : message_receiver_base<mqtt5::puback_reason_code>
         {
             Receiver next_;
 

@@ -10,16 +10,10 @@
 #include <p0443_v2/set_error.hpp>
 #include <p0443_v2/set_value.hpp>
 
+#include "message_receiver_base.hpp"
+
 namespace mqtt5::detail
 {
-struct connect_sender_receiver_base
-{
-    virtual ~connect_sender_receiver_base() = default;
-
-    virtual void set_value() = 0;
-    virtual void set_done() = 0;
-    virtual void set_error(std::exception_ptr) = 0;
-};
 template <class Client>
 struct connect_sender
 {
@@ -48,7 +42,7 @@ struct connect_sender
     };
 
     template <class Receiver>
-    struct receiver_impl : connect_sender_receiver_base
+    struct receiver_impl : detail::message_receiver_base<>
     {
         p0443_v2::remove_cvref_t<Receiver> next_;
 
