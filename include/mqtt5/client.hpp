@@ -33,6 +33,7 @@
 #include <p0443_v2/asio/connect.hpp>
 #include <p0443_v2/asio/resolve.hpp>
 #include <p0443_v2/asio/timer.hpp>
+#include <p0443_v2/sink_receiver.hpp>
 #include <p0443_v2/submit.hpp>
 
 #include <boost/asio/steady_timer.hpp>
@@ -116,10 +117,11 @@ private:
     template <class T>
     void send_message(T &&msg);
     void receive_one_message();
-    void handle_connack(protocol::connack &connack);
-    void handle_puback(protocol::puback &puback);
-    void handle_suback(protocol::suback &suback);
-    void handle_unsuback(protocol::unsuback &unsuback);
+    void handle_packet(protocol::connack &connack);
+    void handle_packet(protocol::puback &puback);
+    void handle_packet(protocol::suback &suback);
+    void handle_packet(protocol::unsuback &unsuback);
+    void handle_packet(protocol::publish &publish);
     void notify_connector_receivers(const bool success) {
         auto recvs = std::move(connect_receivers_);
         connect_receivers_.clear();
@@ -297,6 +299,18 @@ struct client<Stream>::connection_sm_t
     static constexpr auto keep_alive_idle = boost::sml::state<struct keep_alive_idle>;
     static constexpr auto keep_alive_waiting = boost::sml::state<struct keep_alive_waiting>;
 
+    template <class PacketT>
+    auto is_packet() {
+        return [](packet_received_evt evt) { return evt.packet->template is<PacketT>(); };
+    }
+
+    template <class PacketT>
+    auto packet_handler() {
+        return [c = this->client_](packet_received_evt evt) {
+            c->handle_packet(*evt.packet->template body_as<PacketT>());
+        };
+    }
+
     client *client_;
     auto operator()() {
         namespace sml = boost::sml;
@@ -308,38 +322,6 @@ struct client<Stream>::connection_sm_t
         auto close_socket = [this] { client_->close(); };
 
         auto start_receiving = [this] { client_->receive_one_message(); };
-
-        auto is_connack = [](packet_received_evt evt) {
-            return evt.packet->template is<protocol::connack>();
-        };
-
-        auto is_puback = [](packet_received_evt evt) {
-            return evt.packet->template is<protocol::puback>();
-        };
-
-        auto is_suback = [](packet_received_evt evt) {
-            return evt.packet->template is<protocol::suback>();
-        };
-
-        auto is_unsuback = [](packet_received_evt evt) {
-            return evt.packet->template is<protocol::unsuback>();
-        };
-
-        auto connection_established = [this](packet_received_evt connack) {
-            client_->handle_connack(*connack.packet->template body_as<protocol::connack>());
-        };
-
-        auto handle_puback = [this](packet_received_evt puback) {
-            client_->handle_puback(*puback.packet->template body_as<protocol::puback>());
-        };
-
-        auto handle_suback = [this](packet_received_evt suback) {
-            client_->handle_suback(*suback.packet->template body_as<protocol::suback>());
-        };
-
-        auto handle_unsuback = [this](packet_received_evt suback) {
-            client_->handle_unsuback(*suback.packet->template body_as<protocol::unsuback>());
-        };
 
         auto start_ping_timer = [this] { client_->start_ping_timer(); };
 
@@ -358,13 +340,18 @@ struct client<Stream>::connection_sm_t
             *idle + sml::event<handshake_evt> = start_handshake,
             start_handshake / ac_start_handshake = handshaking,
 
-            handshaking + sml::event<packet_received_evt>[is_connack] / connection_established =
-                connected,
+            handshaking + sml::event<packet_received_evt>[is_packet<protocol::connack>()] /
+                              packet_handler<protocol::connack>() = connected,
             handshaking + sml::event<disconnect_evt> / close_socket = idle,
 
-            connected + sml::event<packet_received_evt>[is_puback] / handle_puback = connected,
-            connected + sml::event<packet_received_evt>[is_suback] / handle_suback = connected,
-            connected + sml::event<packet_received_evt>[is_unsuback] / handle_unsuback = connected,
+            connected + sml::event<packet_received_evt>[is_packet<protocol::puback>()] /
+                            packet_handler<protocol::puback>() = connected,
+            connected + sml::event<packet_received_evt>[is_packet<protocol::suback>()] /
+                            packet_handler<protocol::suback>() = connected,
+            connected + sml::event<packet_received_evt>[is_packet<protocol::unsuback>()] /
+                            packet_handler<protocol::unsuback>() = connected,
+            connected + sml::event<packet_received_evt>[is_packet<protocol::publish>()] /
+                            packet_handler<protocol::publish>() = connected,
 
             *rx_idle + sml::event<handshake_evt> / start_receiving = rx_receiving,
             rx_receiving + sml::event<packet_received_evt> / start_receiving = rx_receiving,
@@ -446,7 +433,7 @@ void client<Stream>::receive_one_message() {
 }
 
 template <class Stream>
-void client<Stream>::handle_connack(protocol::connack &connack) {
+void client<Stream>::handle_packet(protocol::connack &connack) {
     if (connack.properties.server_keep_alive.count() != 0) {
         keep_alive_used_ = connack.properties.server_keep_alive;
     }
@@ -459,7 +446,7 @@ void client<Stream>::handle_connack(protocol::connack &connack) {
 }
 
 template <class Stream>
-void client<Stream>::handle_puback(protocol::puback &puback) {
+void client<Stream>::handle_packet(protocol::puback &puback) {
     auto iter =
         std::find_if(published_messages_.begin(), published_messages_.end(), [&](auto &msg) {
             return puback.packet_identifier == msg.message_.packet_identifier;
@@ -472,7 +459,7 @@ void client<Stream>::handle_puback(protocol::puback &puback) {
 }
 
 template <class Stream>
-void client<Stream>::handle_suback(protocol::suback &suback) {
+void client<Stream>::handle_packet(protocol::suback &suback) {
     auto iter =
         std::find_if(subscribe_messages_.begin(), subscribe_messages_.end(), [&](auto &msg) {
             return suback.packet_identifier == msg.message_.packet_identifier;
@@ -490,7 +477,7 @@ void client<Stream>::handle_suback(protocol::suback &suback) {
 }
 
 template <class Stream>
-void client<Stream>::handle_unsuback(protocol::unsuback &unsuback) {
+void client<Stream>::handle_packet(protocol::unsuback &unsuback) {
     auto iter =
         std::find_if(unsubscribe_messages_.begin(), unsubscribe_messages_.end(), [&](auto &msg) {
             return unsuback.packet_identifier == msg.message_.packet_identifier;
@@ -499,6 +486,15 @@ void client<Stream>::handle_unsuback(protocol::unsuback &unsuback) {
         detail::in_flight_unsubscribe to_finish = std::move(*iter);
         unsubscribe_messages_.erase(iter);
         to_finish.receiver_->set_value(std::move(unsuback.reason_codes));
+    }
+}
+
+template <class Stream>
+void client<Stream>::handle_packet(protocol::publish &publish) {
+    if (publish.quality_of_service() == 1_qos) {
+        protocol::puback ack;
+        ack.packet_identifier = publish.packet_identifier;
+        p0443_v2::submit(connection_.control_packet_writer(ack), p0443_v2::sink_receiver{});
     }
 }
 
