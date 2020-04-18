@@ -149,24 +149,24 @@ public:
 
     void close();
 
-    auto get_executor() {
+    [[nodiscard]] auto get_executor() {
         return connection_.get_executor();
     }
 
-    auto socket_connector(boost::string_view host, boost::string_view port);
+    [[nodiscard]] auto socket_connector(boost::string_view host, boost::string_view port);
 
     template <int N>
-    auto &get_nth_layer() {
+    [[nodiscard]] auto &get_nth_layer() {
         return get_nth_layer_impl<N>(connection_);
     }
 
-    auto handshaker(connect_options opts) {
+    [[nodiscard]] auto handshaker(connect_options opts) {
         connect_opts_ = std::move(opts);
         return detail::connect_sender{this};
     }
 
     template <class Payload, class... Opts>
-    auto publisher(std::string topic, Payload &&payload, Opts &&... opts) {
+    [[nodiscard]] auto publisher(std::string topic, Payload &&payload, Opts &&... opts) {
         auto opts_and_modifiers =
             publish_options::detail::separate_options_modifiers(std::forward<Opts>(opts)...);
         auto late_modifier =
@@ -182,7 +182,7 @@ public:
     }
 
     template <class Payload, class... Opts>
-    auto reusable_publisher(std::string topic, Payload &&payload, Opts &&... opts) {
+    [[nodiscard]] auto reusable_publisher(std::string topic, Payload &&payload, Opts &&... opts) {
         auto opts_and_modifiers =
             publish_options::detail::separate_options_modifiers(std::forward<Opts>(opts)...);
         auto late_modifier =
@@ -198,37 +198,37 @@ public:
     }
 
     template <class Modifier>
-    auto subscriber(std::vector<mqtt5::single_subscription> subs, Modifier &&modifier) {
+    [[nodiscard]] auto subscriber(std::vector<mqtt5::single_subscription> subs, Modifier &&modifier) {
         using modifier_t = p0443_v2::remove_cvref_t<Modifier>;
         auto retval = detail::subscribe_sender{this, std::forward<Modifier>(modifier)};
         retval.subscriptions_ = std::move(subs);
         return retval;
     }
 
-    auto subscriber(std::vector<mqtt5::single_subscription> subs) {
+    [[nodiscard]] auto subscriber(std::vector<mqtt5::single_subscription> subs) {
         return subscriber(std::move(subs), [](auto &) {});
     }
 
-    auto subscriber(topic_filter topic, mqtt5::quality_of_service qos) {
+    [[nodiscard]] auto subscriber(topic_filter topic, mqtt5::quality_of_service qos) {
         single_subscription single_sub;
         single_sub.topic = topic;
         single_sub.quality_of_service = qos;
         return subscriber({single_sub}, [](auto &) {});
     }
 
-    auto unsubscriber(std::vector<std::string> topics) {
+    [[nodiscard]] auto unsubscriber(std::vector<std::string> topics) {
         auto retval = detail::unsubscribe_sender<client>{this};
         retval.unsub.topics = std::move(topics);
         return retval;
     }
 
-    auto disconnector(mqtt5::disconnect_reason reason = mqtt5::disconnect_reason::normal) {
+    [[nodiscard]] auto disconnector(mqtt5::disconnect_reason reason = mqtt5::disconnect_reason::normal) {
         return p0443_v2::transform(connection_.control_packet_writer(mqtt5::protocol::disconnect(reason)),
                             [this](auto...) { this->close(); });
     }
 
-    bool is_connected();
-    bool is_handshaking();
+    [[nodiscard]] bool is_connected();
+    [[nodiscard]] bool is_handshaking();
 
     /**
      * @brief Gets the actual keep alive value used.
@@ -237,7 +237,7 @@ public:
      * the client requested value. This will always reflect what is used by both
      * server and client, not what is requested by the client.
      */
-    std::chrono::seconds get_actual_keep_alive() const {
+    [[nodiscard]] std::chrono::seconds get_actual_keep_alive() const {
         return keep_alive_used_;
     }
 
@@ -246,7 +246,7 @@ public:
      *
      * This can be assigned by the server after the fact.
      */
-    std::string client_id() const {
+    [[nodiscard]] std::string client_id() const {
         return client_id_;
     }
 };
