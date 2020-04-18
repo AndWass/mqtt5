@@ -14,7 +14,9 @@
 #include "detail/unsubscribe_sender.hpp"
 
 #include "mqtt5/connect_options.hpp"
+#include "mqtt5/disconnect_reason.hpp"
 #include "mqtt5/protocol/connect.hpp"
+#include "mqtt5/protocol/disconnect.hpp"
 #include "mqtt5/protocol/ping.hpp"
 #include "mqtt5/protocol/publish.hpp"
 #include "mqtt5/puback_reason_code.hpp"
@@ -204,7 +206,7 @@ public:
     }
 
     auto subscriber(std::vector<mqtt5::single_subscription> subs) {
-        return subscriber(std::move(subs), [](auto&) {});
+        return subscriber(std::move(subs), [](auto &) {});
     }
 
     auto subscriber(topic_filter topic, mqtt5::quality_of_service qos) {
@@ -218,6 +220,11 @@ public:
         auto retval = detail::unsubscribe_sender<client>{this};
         retval.unsub.topics = std::move(topics);
         return retval;
+    }
+
+    auto disconnector(mqtt5::disconnect_reason reason = mqtt5::disconnect_reason::normal) {
+        return p0443_v2::transform(connection_.control_packet_writer(mqtt5::protocol::disconnect(reason)),
+                            [this](auto...) { this->close(); });
     }
 
     bool is_connected();
@@ -482,13 +489,13 @@ void client<Stream>::handle_suback(protocol::suback &suback) {
     }
 }
 
-template<class Stream>
+template <class Stream>
 void client<Stream>::handle_unsuback(protocol::unsuback &unsuback) {
-    auto iter = std::find_if(unsubscribe_messages_.begin(), unsubscribe_messages_.end(), [&](auto &msg)
-    {
-        return unsuback.packet_identifier == msg.message_.packet_identifier;
-    });
-    if(iter != unsubscribe_messages_.end()) {
+    auto iter =
+        std::find_if(unsubscribe_messages_.begin(), unsubscribe_messages_.end(), [&](auto &msg) {
+            return unsuback.packet_identifier == msg.message_.packet_identifier;
+        });
+    if (iter != unsubscribe_messages_.end()) {
         detail::in_flight_unsubscribe to_finish = std::move(*iter);
         unsubscribe_messages_.erase(iter);
         to_finish.receiver_->set_value(std::move(unsuback.reason_codes));
