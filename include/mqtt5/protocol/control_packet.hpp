@@ -15,7 +15,7 @@
 #include <mqtt5/protocol/publish.hpp>
 #include <mqtt5/protocol/subscribe.hpp>
 #include <mqtt5/protocol/unsubscribe.hpp>
-
+#include <mqtt5/protocol/disconnect.hpp>
 #include <p0443_v2/just.hpp>
 #include <p0443_v2/then.hpp>
 #include <p0443_v2/type_traits.hpp>
@@ -80,7 +80,7 @@ struct control_packet
 {
 private:
     using body_storage_type =
-        std::variant<connect, connack, publish, puback, subscribe, suback, unsubscribe, unsuback, pingreq, pingresp>;
+        std::variant<connect, connack, publish, puback, subscribe, suback, unsubscribe, unsuback, disconnect, pingreq, pingresp>;
     template <class T>
     using is_body_type = std::bool_constant<boost::mp11::mp_find<body_storage_type, T>::value !=
                                             boost::mp11::mp_size<body_storage_type>::value>;
@@ -180,6 +180,9 @@ public:
                     }
                     else if(header_.type() == unsuback::type_value) {
                         body_.template emplace<unsuback>(std::in_place, header_, buffer_fetcher);
+                    }
+                    else if(header_.type() == disconnect::type_value) {
+                        body_.template emplace<disconnect>(std::in_place, header_, buffer_fetcher);
                     }
                     else if(header_.type() == pingreq::type_value) {
                         body_.template emplace<pingreq>();

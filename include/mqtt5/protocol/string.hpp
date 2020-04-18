@@ -46,6 +46,9 @@ struct key_value_pair
 {
     struct deserialize_result;
 
+    std::string key;
+    std::string value;
+
     template<class Stream>
     [[nodiscard]] static key_value_pair deserialize(transport::data_fetcher<Stream> fetcher)
     {
@@ -61,8 +64,9 @@ struct key_value_pair
         string::serialize(data.value, writer);
     }
 
-    std::string key;
-    std::string value;
+    friend bool operator==(const key_value_pair& lhs, const key_value_pair& rhs)  {
+        return lhs.key == rhs.key && lhs.value == rhs.value;
+    }
 };
 } // namespace protocol
 } // namespace mqtt5
