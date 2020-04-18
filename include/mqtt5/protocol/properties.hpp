@@ -57,6 +57,10 @@ struct property
         operator std::uint32_t() noexcept {
             return value;
         }
+
+        friend bool operator==(const varlen_value& lhs, const varlen_value& rhs) {
+            return lhs.value == rhs.value;
+        }
     };
 
     template <class Stream>
@@ -227,6 +231,10 @@ struct property
         T value;
         std::visit([&, this](const auto &v) { get_value_into(value, v); }, value_);
         return value;
+    }
+
+    friend bool operator==(const property &lhs, const property &rhs) {
+        return lhs.identifier == rhs.identifier && lhs.value_ == rhs.value_;
     }
 
     varlen_int::type identifier;
