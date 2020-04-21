@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <exception>
+
 namespace mqtt5::detail
 {
 template<class...Values>

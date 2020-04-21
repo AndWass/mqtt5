@@ -157,5 +157,9 @@ public:
         // lengths are equal
         return matches_n_levels(levels_.size());
     }
+
+    friend bool operator==(const topic_filter &lhs, const topic_filter &rhs) {
+        return lhs.levels_ == rhs.levels_;
+    }
 };
 } // namespace mqtt5
