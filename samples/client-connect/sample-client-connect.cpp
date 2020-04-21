@@ -26,6 +26,8 @@ namespace ws = boost::beast::websocket;
 using namespace mqtt5::literals;
 
 p0443_v2::immediate_task run_tcp_client(mqtt5::client<tcp::socket> &client) {
+    net::steady_timer wait_timer(client.get_executor());
+    co_await p0443_v2::asio::timer::wait_for(wait_timer, std::chrono::seconds{5});
     mqtt5::connect_options opts;
     boost::string_view hostname = "mqtt.eclipse.org";
     boost::string_view port = "1883";
@@ -38,25 +40,18 @@ p0443_v2::immediate_task run_tcp_client(mqtt5::client<tcp::socket> &client) {
     opts.last_will->content_type = "application/json";
 
     co_await client.socket_connector(hostname, port);
-    std::cout << "Socket connected...\n";
     co_await client.handshaker(opts);
-    std::cout << "Handshake complete...\n";
-
-    auto subres = co_await client.subscriber("mqtt5/+", 1_qos);
-    std::cout << "Subscribed with result code " << (int)subres.codes.front() << "\n";
-    auto unsubres = co_await client.unsubscriber({"mqtt5/+", "hello"});
-    std::cout << "Unsubscribed with result code " << (int)unsubres.front() << "\n";
 
     namespace pubopt = mqtt5::publish_options;
     // A normal publisher can only be used once, either by co_await
     // or by p0443_v2::connect and start, or submit.
-    co_await client.publisher("mqtt5/hello_world", "Hello world!", 1_qos,
+    co_await client.publisher("log/debug", "Hello world!", 1_qos,
                               mqtt5::payload_format_indicator::utf8);
 
     int packet_number = 1;
     // A reusable_publisher can be used multiple times.
     auto publisher = client.reusable_publisher(
-        "mqtt5/tcp_client", "hello world from TCP client! ", 1_qos, pubopt::topic_alias(1),
+        "mqtt5/telemetry/hello_world", "hello world from TCP client! ", 1_qos, pubopt::topic_alias(1),
         [&packet_number](mqtt5::protocol::publish &pub) mutable {
             if (packet_number > 1) {
                 pub.topic.clear();
@@ -70,8 +65,45 @@ p0443_v2::immediate_task run_tcp_client(mqtt5::client<tcp::socket> &client) {
         co_await publisher;
     }
 
-    std::cout << "All messages published!\n";
+    co_await client.publisher("mqtt5/messages", "TCP client done");
+    client.close();
 }
+
+void print_publish(const mqtt5::protocol::publish &publish) {
+    std::string payload(publish.payload.begin(), publish.payload.end());
+    std::cout << payload << "\n";
+    std::cout << "  [ Topic = " << publish.topic << "\n";
+    std::cout << "    QoS = " << static_cast<int>(publish.quality_of_service())
+              << " Packet ID = " << publish.packet_identifier << " ]\n";
+}
+
+p0443_v2::immediate_task
+read_telemetry(mqtt5::client<ws::stream<boost::beast::tcp_stream>> &client) {
+    while(true) {
+        auto publish = co_await client.filtered_subscriber("mqtt5/telemetry/+");
+        std::cout << "Telemetry: \n";
+        print_publish(publish);
+    }
+}
+
+p0443_v2::immediate_task
+read_messages(mqtt5::client<ws::stream<boost::beast::tcp_stream>> &client) {
+    while(true) {
+        auto publish = co_await client.filtered_subscriber("mqtt5/messages");
+        std::cout << "Message: \n";
+        print_publish(publish);
+    }
+}
+
+p0443_v2::immediate_task
+read_debug(mqtt5::client<ws::stream<boost::beast::tcp_stream>> &client) {
+    while(true) {
+        auto publish = co_await client.filtered_subscriber("+/debug");
+        std::cout << "Debug: \n";
+        print_publish(publish);
+    }
+}
+
 
 p0443_v2::immediate_task
 run_websocket_client(mqtt5::client<ws::stream<boost::beast::tcp_stream>> &client) {
@@ -97,13 +129,11 @@ run_websocket_client(mqtt5::client<ws::stream<boost::beast::tcp_stream>> &client
 
     namespace pubopt = mqtt5::publish_options;
 
-    auto result = co_await client.publisher(
-        "mqtt5/websocket_client", "hello world from WebSocket client!", 1_qos,
-        pubopt::topic_alias(1), mqtt5::payload_format_indicator::utf8);
-
-    std::cout << "Message published with code " << (int)result << "\n";
-    co_await client.publisher("", "Published using topic alias from WebSocket client!", 1_qos,
-                              pubopt::topic_alias(1));
+    co_await client.subscriber("mqtt5/#", 1_qos);
+    co_await client.subscriber("log/#", 1_qos);
+    read_telemetry(client);
+    read_messages(client);
+    read_debug(client);
 }
 
 int main() {

@@ -12,6 +12,7 @@
 #include "detail/publish_sender.hpp"
 #include "detail/subscribe_sender.hpp"
 #include "detail/unsubscribe_sender.hpp"
+#include "detail/filter_subscribe_sender.hpp"
 
 #include "mqtt5/connect_options.hpp"
 #include "mqtt5/disconnect_reason.hpp"
@@ -80,6 +81,8 @@ private:
     template <class, class>
     friend struct detail::subscribe_sender;
     template <class>
+    friend struct detail::filter_subscribe_sender;
+    template <class>
     friend struct detail::unsubscribe_sender;
 
     template <class, class>
@@ -101,6 +104,7 @@ private:
     std::vector<detail::in_flight_publish> published_messages_;
     std::vector<detail::in_flight_subscribe> subscribe_messages_;
     std::vector<detail::in_flight_unsubscribe> unsubscribe_messages_;
+    std::vector<detail::filtered_subscription> publish_waiters_;
 
     struct connection_sm_t;
 
@@ -200,7 +204,8 @@ public:
     }
 
     template <class Modifier>
-    [[nodiscard]] auto subscriber(std::vector<mqtt5::single_subscription> subs, Modifier &&modifier) {
+    [[nodiscard]] auto subscriber(std::vector<mqtt5::single_subscription> subs,
+                                  Modifier &&modifier) {
         using modifier_t = p0443_v2::remove_cvref_t<Modifier>;
         auto retval = detail::subscribe_sender{this, std::forward<Modifier>(modifier)};
         retval.subscriptions_ = std::move(subs);
@@ -218,15 +223,21 @@ public:
         return subscriber({single_sub}, [](auto &) {});
     }
 
+    [[nodiscard]] auto filtered_subscriber(topic_filter topic) {
+        return detail::filter_subscribe_sender{this, std::move(topic)};
+    }
+
     [[nodiscard]] auto unsubscriber(std::vector<std::string> topics) {
         auto retval = detail::unsubscribe_sender<client>{this};
         retval.unsub.topics = std::move(topics);
         return retval;
     }
 
-    [[nodiscard]] auto disconnector(mqtt5::disconnect_reason reason = mqtt5::disconnect_reason::normal) {
-        return p0443_v2::transform(connection_.control_packet_writer(mqtt5::protocol::disconnect(reason)),
-                            [this](auto...) { this->close(); });
+    [[nodiscard]] auto
+    disconnector(mqtt5::disconnect_reason reason = mqtt5::disconnect_reason::normal) {
+        return p0443_v2::transform(
+            connection_.control_packet_writer(mqtt5::protocol::disconnect(reason)),
+            [this](auto...) { this->close(); });
     }
 
     [[nodiscard]] bool is_connected();
@@ -495,6 +506,24 @@ void client<Stream>::handle_packet(protocol::publish &publish) {
         protocol::puback ack;
         ack.packet_identifier = publish.packet_identifier;
         p0443_v2::submit(connection_.control_packet_writer(ack), p0443_v2::sink_receiver{});
+    }
+
+    std::vector<std::vector<std::unique_ptr<typename detail::filtered_subscription::receiver_type>>> all_receivers;
+    for(auto iter=publish_waiters_.begin(); iter != publish_waiters_.end();) {
+        if(iter->filter_.matches(publish.topic))
+        {
+            all_receivers.emplace_back(std::move(iter->receivers_));
+            iter =  publish_waiters_.erase(iter);
+        }
+        else {
+            iter++;
+        }
+    }
+
+    for(auto& rv: all_receivers) {
+        for(auto& rx: rv) {
+            rx->set_value(publish);
+        }
     }
 }
 
