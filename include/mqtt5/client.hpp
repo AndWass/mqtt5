@@ -106,6 +106,22 @@ private:
     std::vector<detail::in_flight_unsubscribe> unsubscribe_messages_;
     std::vector<detail::filtered_subscription> publish_waiters_;
 
+    std::vector<std::unique_ptr<detail::publish_op_starter_base>> queued_publishes_;
+    std::uint16_t server_max_send_quota_{65535};
+    std::uint16_t server_send_quota_{65535};
+
+    void maybe_send_queued_publish() {
+        if (server_send_quota_ < server_max_send_quota_) {
+            server_send_quota_++;
+
+            if (!queued_publishes_.empty()) {
+                auto next = std::move(queued_publishes_.front());
+                queued_publishes_.erase(queued_publishes_.begin());
+                next->start();
+            }
+        }
+    }
+
     struct connection_sm_t;
 
     std::unique_ptr<boost::sml::sm<connection_sm_t>> connection_sm_;
@@ -451,6 +467,8 @@ void client<Stream>::handle_packet(protocol::connack &connack) {
     if (!connack.properties.assigned_client_id.empty()) {
         client_id_ = connack.properties.assigned_client_id;
     }
+    server_max_send_quota_ = connack.properties.receive_maximum;
+    server_send_quota_ = connack.properties.receive_maximum;
 
     connection_sm_->process_event(typename connection_sm_t::handshake_done_evt{});
     notify_connector_receivers(true);
@@ -467,6 +485,8 @@ void client<Stream>::handle_packet(protocol::puback &puback) {
         published_messages_.erase(iter);
         to_finish.receiver_->set_value(puback.reason_code);
     }
+
+    maybe_send_queued_publish();
 }
 
 template <class Stream>
@@ -598,6 +618,8 @@ void client<Stream>::send_connect() {
     client_id_ = connect_opts_.client_id;
     connect.keep_alive = connect_opts_.keep_alive;
     connect.client_id = connect_opts_.client_id;
+
+    connect.connect_properties.receive_maximum = connect_opts_.receive_maximum;
 
     connect.flags |= connect_opts_.clean_start ? 0 : protocol::connect::clean_start_flag;
 
