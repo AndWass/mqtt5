@@ -9,10 +9,10 @@
 #include "connection.hpp"
 #include "detail/connect_sender.hpp"
 #include "detail/event_emitting_receiver.hpp"
+#include "detail/filter_subscribe_sender.hpp"
 #include "detail/publish_sender.hpp"
 #include "detail/subscribe_sender.hpp"
 #include "detail/unsubscribe_sender.hpp"
-#include "detail/filter_subscribe_sender.hpp"
 
 #include "mqtt5/connect_options.hpp"
 #include "mqtt5/disconnect_reason.hpp"
@@ -528,20 +528,20 @@ void client<Stream>::handle_packet(protocol::publish &publish) {
         p0443_v2::submit(connection_.control_packet_writer(ack), p0443_v2::sink_receiver{});
     }
 
-    std::vector<std::vector<std::unique_ptr<typename detail::filtered_subscription::receiver_type>>> all_receivers;
-    for(auto iter=publish_waiters_.begin(); iter != publish_waiters_.end();) {
-        if(iter->filter_.matches(publish.topic))
-        {
+    std::vector<std::vector<std::unique_ptr<typename detail::filtered_subscription::receiver_type>>>
+        all_receivers;
+    for (auto iter = publish_waiters_.begin(); iter != publish_waiters_.end();) {
+        if (iter->filter_.matches(publish.topic)) {
             all_receivers.emplace_back(std::move(iter->receivers_));
-            iter =  publish_waiters_.erase(iter);
+            iter = publish_waiters_.erase(iter);
         }
         else {
             iter++;
         }
     }
 
-    for(auto& rv: all_receivers) {
-        for(auto& rx: rv) {
+    for (auto &rv : all_receivers) {
+        for (auto &rx : rv) {
             rx->set_value(publish);
         }
     }
