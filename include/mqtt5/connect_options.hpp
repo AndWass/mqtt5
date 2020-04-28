@@ -52,6 +52,7 @@ struct connect_options
     std::chrono::duration<std::uint16_t> keep_alive{0};
     std::string username;
     std::vector<std::uint8_t> password;
+    std::uint16_t receive_maximum=65535;
 
     bool clean_start = true;
 };
