@@ -528,8 +528,9 @@ void client<Stream>::handle_packet(protocol::publish &publish) {
         p0443_v2::submit(connection_.control_packet_writer(ack), p0443_v2::sink_receiver{});
     }
 
-    std::vector<std::vector<std::unique_ptr<typename detail::filtered_subscription::receiver_type>>>
-        all_receivers;
+    using filtered_sub_container_t = decltype(publish_waiters_.front().receivers_);
+
+    std::vector<filtered_sub_container_t> all_receivers;
     for (auto iter = publish_waiters_.begin(); iter != publish_waiters_.end();) {
         if (iter->filter_.matches(publish.topic)) {
             all_receivers.emplace_back(std::move(iter->receivers_));
