@@ -110,6 +110,8 @@ private:
     std::uint16_t server_max_send_quota_{65535};
     std::uint16_t server_send_quota_{65535};
 
+    std::uint16_t client_receive_quota_{65535};
+
     void maybe_send_queued_publish() {
         if (server_send_quota_ < server_max_send_quota_) {
             server_send_quota_++;
@@ -311,6 +313,10 @@ struct client<Stream>::connection_sm_t
     {
     };
 
+    struct puback_sent_evt
+    {
+    };
+
     static constexpr auto idle = boost::sml::state<struct idle>;
     static constexpr auto start_handshake = boost::sml::state<struct start_handshake>;
     static constexpr auto handshaking = boost::sml::state<struct handshaking>;
@@ -363,6 +369,12 @@ struct client<Stream>::connection_sm_t
 
         auto stop_keep_alive_timer = [this] { client_->stop_keep_alive_timer(); };
 
+        auto puback_sent_handler = [this] {
+            if (client_->client_receive_quota_ < client_->connect_opts_.receive_maximum) {
+                client_->client_receive_quota_++;
+            }
+        };
+
         return sml::make_transition_table(
             *idle + sml::event<handshake_evt> = start_handshake,
             start_handshake / ac_start_handshake = handshaking,
@@ -379,6 +391,7 @@ struct client<Stream>::connection_sm_t
                             packet_handler<protocol::unsuback>() = connected,
             connected + sml::event<packet_received_evt>[is_packet<protocol::publish>()] /
                             packet_handler<protocol::publish>() = connected,
+            connected + sml::event<puback_sent_evt> / puback_sent_handler = connected,
 
             *rx_idle + sml::event<handshake_evt> / start_receiving = rx_receiving,
             rx_receiving + sml::event<packet_received_evt> / start_receiving = rx_receiving,
@@ -470,6 +483,8 @@ void client<Stream>::handle_packet(protocol::connack &connack) {
     server_max_send_quota_ = connack.properties.receive_maximum;
     server_send_quota_ = connack.properties.receive_maximum;
 
+    client_receive_quota_ = connect_opts_.receive_maximum;
+
     connection_sm_->process_event(typename connection_sm_t::handshake_done_evt{});
     notify_connector_receivers(true);
 }
@@ -522,10 +537,23 @@ void client<Stream>::handle_packet(protocol::unsuback &unsuback) {
 
 template <class Stream>
 void client<Stream>::handle_packet(protocol::publish &publish) {
+    if (publish.quality_of_service() != 0_qos) {
+        if (client_receive_quota_ > 0) {
+            client_receive_quota_--;
+        }
+        else {
+            p0443_v2::submit(disconnector(mqtt5::disconnect_reason::quota_exceeded),
+                             p0443_v2::sink_receiver{});
+        }
+    }
+
     if (publish.quality_of_service() == 1_qos) {
         protocol::puback ack;
         ack.packet_identifier = publish.packet_identifier;
-        p0443_v2::submit(connection_.control_packet_writer(ack), p0443_v2::sink_receiver{});
+        p0443_v2::submit(
+            connection_.control_packet_writer(ack),
+            detail::event_emitting_receiver<client<Stream>,
+                                            typename connection_sm_t::puback_sent_evt>{this});
     }
 
     using filtered_sub_container_t = decltype(publish_waiters_.front().receivers_);
