@@ -14,6 +14,9 @@ template<class Client>
 struct event_emitting_receiver_base
 {
     Client *client_;
+    event_emitting_receiver_base(Client *client): client_(client) {}
+    event_emitting_receiver_base(Client &client): client_(&client) {}
+
     void set_done() {
     }
     template <class E>
@@ -29,6 +32,8 @@ struct event_emitting_receiver;
 template <class Client, class ValueEvent>
 struct event_emitting_receiver<Client, ValueEvent> : event_emitting_receiver_base<Client>, ValueEvent
 {
+    using event_emitting_receiver_base<Client>::event_emitting_receiver_base;
+
     template <class... Values>
     void set_value(Values &&...) {
         this->client_->connection_sm_->process_event(static_cast<ValueEvent &>(*this));
