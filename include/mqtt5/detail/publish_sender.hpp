@@ -15,8 +15,15 @@ namespace mqtt5::detail
 {
 struct in_flight_publish
 {
+    enum class state_type
+    {
+        waiting_puback,
+        waiting_pubrec,
+        waitiing_pubcomp
+    };
     protocol::publish message_;
-    std::unique_ptr<detail::message_receiver_base<mqtt5::puback_reason_code>> receiver_;
+    std::unique_ptr<detail::message_receiver_base<mqtt5::publish_result>> receiver_;
+    state_type state_ = state_type::waiting_puback;
 };
 
 struct publish_op_starter_base
@@ -42,7 +49,7 @@ template <class Client, class Modifier>
 struct publish_sender
 {
     template <template <class...> class Tuple, template <class...> class Variant>
-    using value_types = Variant<Tuple<mqtt5::puback_reason_code>>;
+    using value_types = Variant<Tuple<mqtt5::publish_result>>;
 
     template <template <class...> class Variant>
     using error_types = Variant<std::exception_ptr>;
@@ -66,14 +73,14 @@ struct publish_sender
         Modifier modifying_function_;
         Client *client_;
 
-        struct publish_receiver : detail::message_receiver_base<mqtt5::puback_reason_code>
+        struct publish_receiver : detail::message_receiver_base<mqtt5::publish_result>
         {
             Receiver next_;
 
             publish_receiver(Receiver &&next) : next_(std::move(next)) {
             }
 
-            void set_value(mqtt5::puback_reason_code code) override {
+            void set_value(mqtt5::publish_result code) override {
                 p0443_v2::set_value(std::move(next_), code);
             }
 
@@ -91,7 +98,7 @@ struct publish_sender
 
             if (message_.quality_of_service() == 0_qos) {
                 client_->send_message(std::move(message_));
-                p0443_v2::set_value(std::move(receiver_), puback_reason_code::success);
+                p0443_v2::set_value(std::move(receiver_), publish_result::success);
             }
             else {
                 message_.packet_identifier = client_->next_packet_identifier();
@@ -99,10 +106,16 @@ struct publish_sender
                                  receiver_ = std::move(receiver_)]() mutable {
                     --client_->server_send_quota_;
                     client_->send_message(message_);
-
+                    auto start_state = in_flight_publish::state_type::waiting_puback;
+                    if(message_.quality_of_service() == 2_qos)
+                    {
+                        start_state = in_flight_publish::state_type::waiting_pubrec;
+                    }
                     in_flight_publish stored{
                         std::move(message_),
-                        std::make_unique<publish_receiver>(std::move(receiver_))};
+                        std::make_unique<publish_receiver>(std::move(receiver_)),
+                        start_state
+                        };
 
                     client_->published_messages_.emplace_back(std::move(stored));
                 };
@@ -129,7 +142,7 @@ template <class Client, class Modifier>
 struct reusable_publish_sender
 {
     template <template <class...> class Tuple, template <class...> class Variant>
-    using value_types = Variant<Tuple<mqtt5::puback_reason_code>>;
+    using value_types = Variant<Tuple<mqtt5::publish_result>>;
 
     template <template <class...> class Variant>
     using error_types = Variant<std::exception_ptr>;

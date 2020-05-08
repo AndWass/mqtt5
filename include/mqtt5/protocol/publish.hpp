@@ -211,10 +211,12 @@ public:
         serialize_body(writer);
     }
 };
-
-class puback
+namespace detail
 {
-public:
+template<class CodeT, std::uint8_t TypeValue, std::uint8_t Flags = 0>
+struct puback_base
+{
+    using code_type = CodeT;
     struct properties_t : properties_t_base
     {
         std::string reason_string;
@@ -246,15 +248,15 @@ public:
         }
     };
     std::uint16_t packet_identifier;
-    mqtt5::puback_reason_code reason_code;
+    code_type reason_code = code_type::success;
     properties_t properties;
 
-    static constexpr std::uint8_t type_value = 4;
+    static constexpr std::uint8_t type_value = TypeValue;
 
-    puback() = default;
+    puback_base() = default;
     template <class T>
-    puback(std::in_place_t, std::uint32_t remaining_length, T fetcher) {
-        deserialize(remaining_length, fetcher);
+    puback_base(std::in_place_t, header hdr, T fetcher) {
+        deserialize(hdr.remaining_length(), fetcher);
     }
 
     template <class Stream>
@@ -262,10 +264,10 @@ public:
         packet_identifier = fixed_int<std::uint16_t>::deserialize(data);
         if (remaining_length > 2) {
             reason_code =
-                static_cast<puback_reason_code>(fixed_int<std::uint8_t>::deserialize(data));
+                static_cast<code_type>(fixed_int<std::uint8_t>::deserialize(data));
         }
         else {
-            reason_code = puback_reason_code::success;
+            reason_code = code_type::success;
         }
 
         if (remaining_length >= 4) {
@@ -281,7 +283,7 @@ public:
         fixed_int<std::uint16_t>::serialize(packet_identifier, writer);
         bool serialize_properties =
             !properties.user_property.empty() || !properties.reason_string.empty();
-        if (reason_code != puback_reason_code::success || serialize_properties) {
+        if (reason_code != code_type::success || serialize_properties) {
             fixed_int<std::uint8_t>::serialize(static_cast<std::uint8_t>(reason_code), writer);
             properties.serialize(writer);
         }
@@ -289,9 +291,29 @@ public:
 
     template <class Writer>
     void serialize(Writer &&writer) const {
-        header hdr(type_value, 0, *this);
+        header hdr(type_value, Flags, *this);
         hdr.serialize(writer);
         serialize_body(writer);
     }
+};
+}
+struct puback: detail::puback_base<mqtt5::puback_reason_code, 4>
+{
+    using detail::puback_base<mqtt5::puback_reason_code, 4>::puback_base;
+};
+
+struct pubrec: detail::puback_base<mqtt5::pubrec_reason_code, 5>
+{
+    using detail::puback_base<mqtt5::puback_reason_code, 5>::puback_base;
+};
+
+struct pubrel: detail::puback_base<pubrel_reason_code, 6, 2>
+{
+    using detail::puback_base<pubrel_reason_code, 6, 2>::puback_base;
+};
+
+struct pubcomp: detail::puback_base<pubcomp_reason_code, 7>
+{
+    using detail::puback_base<pubcomp_reason_code, 7>::puback_base;
 };
 } // namespace mqtt5::protocol
