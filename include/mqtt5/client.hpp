@@ -114,8 +114,13 @@ private:
 
     std::vector<detail::filtered_subscription> publish_waiters_;
     void deliver_to_publish_waiters(const protocol::publish &publish) {
+        // Vector of unique pointers
         using filtered_sub_container_t = decltype(publish_waiters_.front().receivers_);
 
+        // Take out all matching current publish waiters
+        // and add them to all_receivers (which is a vector in vector)
+        // don't just set value in this loop since set_value can
+        // add new items to publish_waiters_
         std::vector<filtered_sub_container_t> all_receivers;
         for (auto iter = publish_waiters_.begin(); iter != publish_waiters_.end();) {
             if (iter->filter_.matches(publish.topic)) {
