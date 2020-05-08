@@ -73,7 +73,7 @@ private:
         }
     } next_packet_identifier;
 
-    struct qos2_state
+    struct received_qos2_state
     {
         enum class state_type { pubrec_sent };
         protocol::publish publish_;
@@ -134,7 +134,7 @@ private:
         }
     }
 
-    std::vector<qos2_state> qos2_states_;
+    std::vector<received_qos2_state> received_qos2_states_;
 
     std::vector<std::unique_ptr<detail::publish_op_starter_base>> queued_publishes_;
     std::uint16_t server_max_send_quota_{65535};
@@ -604,18 +604,19 @@ void client<Stream>::handle_packet(protocol::publish &publish) {
     }
     else if (publish.quality_of_service() == 2_qos) {
         auto iter =
-            std::find_if(qos2_states_.begin(), qos2_states_.end(), [&](const qos2_state &state) {
-                return state.publish_.packet_identifier == publish.packet_identifier;
-            });
+            std::find_if(received_qos2_states_.begin(), received_qos2_states_.end(),
+                         [&](const received_qos2_state &state) {
+                             return state.publish_.packet_identifier == publish.packet_identifier;
+                         });
         deliver_to_receivers = false;
         protocol::pubrec rec;
         rec.packet_identifier = publish.packet_identifier;
 
-        if (iter == qos2_states_.end()) {
-            qos2_state new_state;
-            new_state.current_state_ = qos2_state::state_type::pubrec_sent;
+        if (iter == received_qos2_states_.end()) {
+            received_qos2_state new_state;
+            new_state.current_state_ = received_qos2_state::state_type::pubrec_sent;
             new_state.publish_ = std::move(publish);
-            qos2_states_.emplace_back(std::move(new_state));
+            received_qos2_states_.emplace_back(std::move(new_state));
         }
         send_message(rec);
     }
@@ -663,16 +664,17 @@ void client<Stream>::handle_packet(protocol::pubrel &pubrel) {
     protocol::pubcomp response;
     response.packet_identifier = pubrel.packet_identifier;
     auto iter =
-        std::find_if(qos2_states_.begin(), qos2_states_.end(), [&](const qos2_state &state) {
-            return state.publish_.packet_identifier == pubrel.packet_identifier;
-        });
+        std::find_if(received_qos2_states_.begin(), received_qos2_states_.end(),
+                     [&](const received_qos2_state &state) {
+                         return state.publish_.packet_identifier == pubrel.packet_identifier;
+                     });
     std::optional<protocol::publish> publish;
-    if (iter == qos2_states_.end()) {
+    if (iter == received_qos2_states_.end()) {
         response.reason_code = pubcomp_reason_code::packet_identifier_not_found;
     }
     else {
         publish = std::move(iter->publish_);
-        qos2_states_.erase(iter);
+        received_qos2_states_.erase(iter);
     }
     send_message(response);
     if (publish) {
