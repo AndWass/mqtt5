@@ -73,6 +73,13 @@ private:
         }
     } next_packet_identifier;
 
+    struct received_qos2_state
+    {
+        enum class state_type { pubrec_sent };
+        protocol::publish publish_;
+        state_type current_state_;
+    };
+
     template <class Client, class... Events>
     friend struct detail::event_emitting_receiver;
 
@@ -104,7 +111,35 @@ private:
     std::vector<detail::in_flight_publish> published_messages_;
     std::vector<detail::in_flight_subscribe> subscribe_messages_;
     std::vector<detail::in_flight_unsubscribe> unsubscribe_messages_;
+
     std::vector<detail::filtered_subscription> publish_waiters_;
+    void deliver_to_publish_waiters(const protocol::publish &publish) {
+        // Vector of unique pointers
+        using filtered_sub_container_t = decltype(publish_waiters_.front().receivers_);
+
+        // Take out all matching current publish waiters
+        // and add them to all_receivers (which is a vector in vector)
+        // don't just set value in this loop since set_value can
+        // add new items to publish_waiters_
+        std::vector<filtered_sub_container_t> all_receivers;
+        for (auto iter = publish_waiters_.begin(); iter != publish_waiters_.end();) {
+            if (iter->filter_.matches(publish.topic)) {
+                all_receivers.emplace_back(std::move(iter->receivers_));
+                iter = publish_waiters_.erase(iter);
+            }
+            else {
+                iter++;
+            }
+        }
+
+        for (auto &rv : all_receivers) {
+            for (auto &rx : rv) {
+                rx->set_value(publish);
+            }
+        }
+    }
+
+    std::vector<received_qos2_state> received_qos2_states_;
 
     std::vector<std::unique_ptr<detail::publish_op_starter_base>> queued_publishes_;
     std::uint16_t server_max_send_quota_{65535};
@@ -144,6 +179,9 @@ private:
     void handle_packet(protocol::suback &suback);
     void handle_packet(protocol::unsuback &unsuback);
     void handle_packet(protocol::publish &publish);
+    void handle_packet(protocol::pubrec &pubrec);
+    void handle_packet(protocol::pubrel &pubrel);
+    void handle_packet(protocol::pubcomp &pubcomp);
     void notify_connector_receivers(const bool success) {
         auto recvs = std::move(connect_receivers_);
         connect_receivers_.clear();
@@ -391,6 +429,12 @@ struct client<Stream>::connection_sm_t
                             packet_handler<protocol::unsuback>() = connected,
             connected + sml::event<packet_received_evt>[is_packet<protocol::publish>()] /
                             packet_handler<protocol::publish>() = connected,
+            connected + sml::event<packet_received_evt>[is_packet<protocol::pubrec>()] /
+                            packet_handler<protocol::pubrec>() = connected,
+            connected + sml::event<packet_received_evt>[is_packet<protocol::pubrel>()] /
+                            packet_handler<protocol::pubrel>() = connected,
+            connected + sml::event<packet_received_evt>[is_packet<protocol::pubcomp>()] /
+                            packet_handler<protocol::pubcomp>() = connected,
             connected + sml::event<puback_sent_evt> / puback_sent_handler = connected,
 
             *rx_idle + sml::event<handshake_evt> / start_receiving = rx_receiving,
@@ -498,7 +542,13 @@ void client<Stream>::handle_packet(protocol::puback &puback) {
     if (iter != published_messages_.end()) {
         detail::in_flight_publish to_finish = std::move(*iter);
         published_messages_.erase(iter);
-        to_finish.receiver_->set_value(puback.reason_code);
+        if (to_finish.state_ == detail::in_flight_publish::state_type::waiting_puback) {
+            to_finish.receiver_->set_value(static_cast<publish_result>(puback.reason_code));
+        }
+        else {
+            to_finish.receiver_->set_done();
+            close();
+        }
     }
 
     maybe_send_queued_publish();
@@ -547,6 +597,8 @@ void client<Stream>::handle_packet(protocol::publish &publish) {
         }
     }
 
+    bool deliver_to_receivers = true;
+
     if (publish.quality_of_service() == 1_qos) {
         protocol::puback ack;
         ack.packet_identifier = publish.packet_identifier;
@@ -555,24 +607,100 @@ void client<Stream>::handle_packet(protocol::publish &publish) {
             detail::event_emitting_receiver<client<Stream>,
                                             typename connection_sm_t::puback_sent_evt>{this});
     }
+    else if (publish.quality_of_service() == 2_qos) {
+        auto iter =
+            std::find_if(received_qos2_states_.begin(), received_qos2_states_.end(),
+                         [&](const received_qos2_state &state) {
+                             return state.publish_.packet_identifier == publish.packet_identifier;
+                         });
+        deliver_to_receivers = false;
+        protocol::pubrec rec;
+        rec.packet_identifier = publish.packet_identifier;
 
-    using filtered_sub_container_t = decltype(publish_waiters_.front().receivers_);
-
-    std::vector<filtered_sub_container_t> all_receivers;
-    for (auto iter = publish_waiters_.begin(); iter != publish_waiters_.end();) {
-        if (iter->filter_.matches(publish.topic)) {
-            all_receivers.emplace_back(std::move(iter->receivers_));
-            iter = publish_waiters_.erase(iter);
+        if (iter == received_qos2_states_.end()) {
+            received_qos2_state new_state;
+            new_state.current_state_ = received_qos2_state::state_type::pubrec_sent;
+            new_state.publish_ = std::move(publish);
+            received_qos2_states_.emplace_back(std::move(new_state));
         }
-        else {
-            iter++;
-        }
+        send_message(rec);
     }
+    if (deliver_to_receivers) {
+        deliver_to_publish_waiters(publish);
+    }
+}
 
-    for (auto &rv : all_receivers) {
-        for (auto &rx : rv) {
-            rx->set_value(publish);
-        }
+template <class Stream>
+void client<Stream>::handle_packet(protocol::pubrec &pubrec) {
+    auto iter =
+        std::find_if(published_messages_.begin(), published_messages_.end(), [&](const auto &msg) {
+            return msg.message_.packet_identifier == pubrec.packet_identifier;
+        });
+    protocol::pubrel response;
+    response.packet_identifier = pubrec.packet_identifier;
+    bool send_response = true;
+
+    if (iter == published_messages_.end()) {
+        response.reason_code = pubrel_reason_code::packet_identifier_not_found;
+    }
+    else if (pubrec.reason_code > pubrec_reason_code::no_matching_subscribers) {
+        detail::in_flight_publish to_finish = std::move(*iter);
+        published_messages_.erase(iter);
+        to_finish.receiver_->set_value(static_cast<publish_result>(pubrec.reason_code));
+        send_response = false;
+    }
+    else if (iter->state_ == detail::in_flight_publish::state_type::waiting_puback) {
+        detail::in_flight_publish to_finish = std::move(*iter);
+        published_messages_.erase(iter);
+        to_finish.receiver_->set_done();
+        close();
+        send_response = false;
+    }
+    else {
+        iter->state_ = detail::in_flight_publish::state_type::waitiing_pubcomp;
+    }
+    if (send_response) {
+        send_message(response);
+    }
+}
+
+template <class Stream>
+void client<Stream>::handle_packet(protocol::pubrel &pubrel) {
+    protocol::pubcomp response;
+    response.packet_identifier = pubrel.packet_identifier;
+    auto iter =
+        std::find_if(received_qos2_states_.begin(), received_qos2_states_.end(),
+                     [&](const received_qos2_state &state) {
+                         return state.publish_.packet_identifier == pubrel.packet_identifier;
+                     });
+    std::optional<protocol::publish> publish;
+    if (iter == received_qos2_states_.end()) {
+        response.reason_code = pubcomp_reason_code::packet_identifier_not_found;
+    }
+    else {
+        publish = std::move(iter->publish_);
+        received_qos2_states_.erase(iter);
+    }
+    send_message(response);
+    if (publish) {
+        deliver_to_publish_waiters(*publish);
+    };
+}
+
+template <class Stream>
+void client<Stream>::handle_packet(protocol::pubcomp &pubcomp) {
+    auto iter =
+        std::find_if(published_messages_.begin(), published_messages_.end(),
+                     [&](const detail::in_flight_publish &state) {
+                         return state.message_.packet_identifier == pubcomp.packet_identifier;
+                     });
+    if (iter == published_messages_.end()) {
+        // Do nothing
+    }
+    else {
+        detail::in_flight_publish to_finish = std::move(*iter);
+        published_messages_.erase(iter);
+        to_finish.receiver_->set_value(static_cast<publish_result>(pubcomp.reason_code));
     }
 }
 

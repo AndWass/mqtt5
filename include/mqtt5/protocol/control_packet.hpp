@@ -9,13 +9,13 @@
 #include <boost/mp11/algorithm.hpp>
 
 #include <mqtt5/protocol/connect.hpp>
-#include <mqtt5/protocol/ping.hpp>
+#include <mqtt5/protocol/disconnect.hpp>
 #include <mqtt5/protocol/header.hpp>
 #include <mqtt5/protocol/inplace_deserializer.hpp>
+#include <mqtt5/protocol/ping.hpp>
 #include <mqtt5/protocol/publish.hpp>
 #include <mqtt5/protocol/subscribe.hpp>
 #include <mqtt5/protocol/unsubscribe.hpp>
-#include <mqtt5/protocol/disconnect.hpp>
 #include <p0443_v2/just.hpp>
 #include <p0443_v2/then.hpp>
 #include <p0443_v2/type_traits.hpp>
@@ -80,7 +80,8 @@ struct control_packet
 {
 private:
     using body_storage_type =
-        std::variant<connect, connack, publish, puback, subscribe, suback, unsubscribe, unsuback, disconnect, pingreq, pingresp>;
+        std::variant<connect, connack, publish, puback, pubrec, pubrel, pubcomp, subscribe, suback,
+                     unsubscribe, unsuback, disconnect, pingreq, pingresp>;
     template <class T>
     using is_body_type = std::bool_constant<boost::mp11::mp_find<body_storage_type, T>::value !=
                                             boost::mp11::mp_size<body_storage_type>::value>;
@@ -166,28 +167,36 @@ public:
                         body_.template emplace<publish>(std::in_place, header_, buffer_fetcher);
                     }
                     else if (header_.type() == puback::type_value) {
-                        body_.template emplace<puback>(std::in_place, header_.remaining_length(),
-                                                       buffer_fetcher);
+                        body_.template emplace<puback>(std::in_place, header_, buffer_fetcher);
+                    }
+                    else if (header_.type() == pubrec::type_value) {
+                        body_.template emplace<pubrec>(std::in_place, header_, buffer_fetcher);
+                    }
+                    else if (header_.type() == pubrel::type_value) {
+                        body_.template emplace<pubrel>(std::in_place, header_, buffer_fetcher);
+                    }
+                    else if(header_.type() == pubcomp::type_value) {
+                        body_.template emplace<pubcomp>(std::in_place, header_, buffer_fetcher);
                     }
                     else if (header_.type() == subscribe::type_value) {
                         body_.template emplace<subscribe>(std::in_place, header_, buffer_fetcher);
                     }
-                    else if(header_.type() == suback::type_value) {
+                    else if (header_.type() == suback::type_value) {
                         body_.template emplace<suback>(std::in_place, header_, buffer_fetcher);
                     }
                     else if (header_.type() == unsubscribe::type_value) {
                         body_.template emplace<unsubscribe>(std::in_place, header_, buffer_fetcher);
                     }
-                    else if(header_.type() == unsuback::type_value) {
+                    else if (header_.type() == unsuback::type_value) {
                         body_.template emplace<unsuback>(std::in_place, header_, buffer_fetcher);
                     }
-                    else if(header_.type() == disconnect::type_value) {
+                    else if (header_.type() == disconnect::type_value) {
                         body_.template emplace<disconnect>(std::in_place, header_, buffer_fetcher);
                     }
-                    else if(header_.type() == pingreq::type_value) {
+                    else if (header_.type() == pingreq::type_value) {
                         body_.template emplace<pingreq>();
                     }
-                    else if(header_.type() == pingresp::type_value) {
+                    else if (header_.type() == pingresp::type_value) {
                         body_.template emplace<pingresp>();
                     }
                     else {
