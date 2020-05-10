@@ -1,5 +1,5 @@
 #include <mqtt5/topic_filter.hpp>
-
+#include <iostream>
 #include <doctest/doctest.h>
 
 TEST_CASE("topic_filter: from string back to string") {
